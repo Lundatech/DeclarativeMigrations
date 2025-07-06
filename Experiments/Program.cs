@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
 
-using Lundatech.DeclarativeMigrations.Builders;
 using Lundatech.DeclarativeMigrations.CustomTypes;
 using Lundatech.DeclarativeMigrations.Databases;
 using Lundatech.DeclarativeMigrations.Models;
@@ -39,16 +38,16 @@ internal class Program {
         var databaseServer = new DatabaseServer(DatabaseServerType.PostgreSql, connectionString);
 
         // create target schema
-        var targetSchema = new DatabaseSchema("haip");
+        var targetSchema = new DatabaseSchema("haip", new Version(1, 0, 1));
 
-        targetSchema.AddTable<ApplicationDatabaseTypes, ApplicationDatabaseTypeProvider>("application_database_types")
+        targetSchema.AddTable<ApplicationDatabaseTypes, ApplicationDatabaseTypeProvider>("application_database_types", new ApplicationDatabaseTypeProvider())
             .WithColumn("customer_id").AsCustomType(ApplicationDatabaseTypes.CustomerId)
             .WithColumn("name").AsString(100)
             .Build();
 
         targetSchema.AddStandardTable("standard_table")
-            .WithColumn("id").AsString().PrimaryKey()
-            .WithColumn("name").AsString(100)
+            .WithColumn("id").AsString(100).AsPrimaryKey()
+            .WithColumn("name").AsBoolean()
             .Build();
 
         await databaseServer.MigrateSchemaTo(targetSchema);

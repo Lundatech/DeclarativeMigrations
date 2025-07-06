@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 
 using Lundatech.DeclarativeMigrations.Builders;
 using Lundatech.DeclarativeMigrations.CustomTypes;
@@ -8,29 +9,34 @@ namespace Lundatech.DeclarativeMigrations.Models;
 
 public class DatabaseSchema {
     private readonly ConcurrentDictionary<string, DatabaseTable> _tables = [];
-    private readonly ConcurrentDictionary<string, DatabaseType> _types = [];
-    private readonly ConcurrentDictionary<string, DatabaseProcedure> _procedures = [];
-    private readonly ConcurrentDictionary<string, DatabaseTableContent> _tableContents = [];
+    //private readonly ConcurrentDictionary<string, DatabaseType> _types = [];
+    //private readonly ConcurrentDictionary<string, DatabaseProcedure> _procedures = [];
+    //private readonly ConcurrentDictionary<string, DatabaseTableContent> _tableContents = [];
     //private readonly ConcurrentDictionary<string, DatabaseFunction> _functions = [];
     //private readonly ConcurrentDictionary<string, DatabaseView> _views = [];
 
     public string Name { get; private set; }
+    public Version SchemaOrApplicationVersion { get; private set; }
 
-    public DatabaseSchema(string name) {
+    public DatabaseSchema(string name, Version schemaOrApplicationVersion) {
         Name = name;
+        SchemaOrApplicationVersion = schemaOrApplicationVersion;
     }
 
-    public TableBuilder<TCustomTypes, TCustomTypeProvider> AddTable<TCustomTypes, TCustomTypeProvider>(string tableName) where TCustomTypes : Enum where TCustomTypeProvider : ICustomTypeProvider<TCustomTypes> {
+    public ImmutableDictionary<string, DatabaseTable> Tables => _tables.ToImmutableDictionary();
+    //public ImmutableDictionary<string, DatabaseType> Types => _types.ToImmutableDictionary();
+    //public ImmutableDictionary<string, DatabaseProcedure> Procedures => _procedures.ToImmutableDictionary();
+    //public ImmutableDictionary<string, DatabaseTableContent> TableContents => _tableContents.ToImmutableDictionary();
+
+    public TableBuilder<TCustomTypes, TCustomTypeProvider> AddTable<TCustomTypes, TCustomTypeProvider>(string tableName, TCustomTypeProvider customTypeProvider) where TCustomTypes : Enum where TCustomTypeProvider : ICustomTypeProvider<TCustomTypes> {
         if (string.IsNullOrWhiteSpace(tableName))
             throw new ArgumentException("Table name cannot be null or whitespace.", nameof(tableName));
         if (tableName.Trim() != tableName)
             throw new ArgumentException("Table name cannot contain leading or trailing whitespace.", nameof(tableName));
-        if (_tables.ContainsKey(tableName))
-            throw new ArgumentException($"Table with name '{tableName}' already exists in the schema.", nameof(tableName));
+        //if (_tables.ContainsKey(tableName))
+        //    throw new ArgumentException($"Table with name '{tableName}' already exists in the schema.", nameof(tableName));
 
-        var table = new DatabaseTable(this, tableName);
-        _tables[tableName] = table;
-        return new TableBuilder<TCustomTypes, TCustomTypeProvider>(this, table);
+        return new TableBuilder<TCustomTypes, TCustomTypeProvider>(this, tableName, customTypeProvider);
     }
 
     public TableBuilder<NullCustomTypes, NullCustomTypeProvider> AddStandardTable(string tableName) {
@@ -38,12 +44,12 @@ public class DatabaseSchema {
             throw new ArgumentException("Table name cannot be null or whitespace.", nameof(tableName));
         if (tableName.Trim() != tableName)
             throw new ArgumentException("Table name cannot contain leading or trailing whitespace.", nameof(tableName));
-        if (_tables.ContainsKey(tableName))
-            throw new ArgumentException($"Table with name '{tableName}' already exists in the schema.", nameof(tableName));
+        //if (_tables.ContainsKey(tableName))
+        //    throw new ArgumentException($"Table with name '{tableName}' already exists in the schema.", nameof(tableName));
 
-        var table = new DatabaseTable(this, tableName);
-        _tables[tableName] = table;
-        return new TableBuilder<NullCustomTypes, NullCustomTypeProvider>(this, table);
+        //var table = new DatabaseTable(this, tableName);
+        //_tables[tableName] = table;
+        return new TableBuilder<NullCustomTypes, NullCustomTypeProvider>(this, tableName, new NullCustomTypeProvider());
     }
 
     public void AddTable(DatabaseTable table) {
@@ -59,6 +65,6 @@ public class DatabaseSchema {
         if (targetSchema == null)
             throw new ArgumentNullException(nameof(targetSchema), "Target schema cannot be null.");
 
-        throw new NotImplementedException();
+        return new DatabaseSchemaMigration(this, targetSchema, migrationTemporaryStorageSchemaName, migrationTemporaryStorageTablePrefix);
     }
 }

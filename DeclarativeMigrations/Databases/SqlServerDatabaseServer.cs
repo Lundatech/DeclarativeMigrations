@@ -38,7 +38,7 @@ internal class SqlServerDatabaseServer : IDatabaseServer {
         throw new NotImplementedException();
     }
 
-    public async Task ApplyMigration(DatabaseSchemaMigration migration, string migrationTemporaryStorageSchemaName, string migrationTemporaryStorageTablePrefix = "ltdm") {
+    public async Task ApplySchemaMigration(DatabaseSchemaMigration migration) {
         if (!_connectionIsOpened) {
             await _connection.OpenAsync();
             _connectionIsOpened = true;

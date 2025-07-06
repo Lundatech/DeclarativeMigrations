@@ -8,13 +8,15 @@ namespace Lundatech.DeclarativeMigrations.Builders;
 public class TableColumnBuilder<TCustomTypes, TCustomTypeProvider> where TCustomTypes : Enum where TCustomTypeProvider : ICustomTypeProvider<TCustomTypes> {
     private readonly TableBuilder<TCustomTypes, TCustomTypeProvider> _parentTableBuilder;
     private readonly DatabaseTable _parentTable;
+    private readonly TCustomTypeProvider _customTypeProvider;
     private readonly string _columnName;
 
     private DatabaseType? _type = null;
+    private bool _isPrimaryKey = false;
     private bool _isNullable = false;
     private DatabaseTableColumnDefaultValue? _defaultValue = null;
 
-    public TableColumnBuilder(TableBuilder<TCustomTypes, TCustomTypeProvider> parentTableBuilder, DatabaseTable parentTable, string columnName) {
+    public TableColumnBuilder(TableBuilder<TCustomTypes, TCustomTypeProvider> parentTableBuilder, DatabaseTable parentTable, TCustomTypeProvider customTypeProvider, string columnName) {
         _parentTableBuilder = parentTableBuilder;
         _parentTable = parentTable;
         _columnName = columnName;
@@ -31,8 +33,59 @@ public class TableColumnBuilder<TCustomTypes, TCustomTypeProvider> where TCustom
         return this;
     }
 
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> AsInteger32() {
+        SetType(new DatabaseType(DatabaseType.Standard.Integer32));
+        return this;
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> AsInteger64() {
+        SetType(new DatabaseType(DatabaseType.Standard.Integer64));
+        return this;
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> AsDecimal(int precision, int scale) {
+        SetType(new DatabaseType(DatabaseType.Standard.Decimal, null, precision, scale));
+        return this;
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> AsBoolean() {
+        SetType(new DatabaseType(DatabaseType.Standard.Boolean));
+        return this;
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> AsGuid() {
+        SetType(new DatabaseType(DatabaseType.Standard.Guid));
+        return this;
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> AsDateTime() {
+        SetType(new DatabaseType(DatabaseType.Standard.DateTime));
+        return this;
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> AsZonedDateTime() {
+        SetType(new DatabaseType(DatabaseType.Standard.ZonedDateTime));
+        return this;
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> AsTimeSpan() {
+        SetType(new DatabaseType(DatabaseType.Standard.TimeSpan));
+        return this;
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> AsBinary(int length) {
+        SetType(new DatabaseType(DatabaseType.Standard.Binary, length));
+        return this;
+    }
+
     public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> AsCustomType(TCustomTypes customType) {
-        SetType(new DatabaseType(Int));
+        SetType(_customTypeProvider.TranslateCustomType(customType));
+        return this;
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> AsPrimaryKey() {
+        _isPrimaryKey = true;
+        return this;
     }
 
     public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> WithColumn(string columnName) {
