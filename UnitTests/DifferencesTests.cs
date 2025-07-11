@@ -8,7 +8,7 @@ public class DifferencesTests {
     [Test]
     public void GetMigrationToTargetSchema_ShouldReturnDifference_WhenTableHasBeenAddedInNewVersion() {
         var databaseSchema = new DatabaseSchema("schema_name", new Version(1, 0, 0));
-        
+
         var targetSchema = new DatabaseSchema("schema_name", new Version(2, 0, 0));
         targetSchema.AddStandardTable("new_table")
             .WithColumn("id").AsInteger32().AsPrimaryKey()

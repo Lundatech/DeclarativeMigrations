@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Data;
 using System.Threading.Tasks;
 
@@ -23,7 +22,7 @@ public class DatabaseServer {
             DatabaseServerType.PostgreSql => new PostgreSqlDatabaseServer(new NpgsqlConnection(connectionString), false, null),
             _ => throw new NotSupportedException($"Database server type '{databaseServerType}' is not supported.")
         };
-        
+
         if (configure != null) configure(_options);
     }
 
