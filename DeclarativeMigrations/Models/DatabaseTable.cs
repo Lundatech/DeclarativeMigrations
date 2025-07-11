@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -6,21 +7,34 @@ using System.Linq;
 namespace Lundatech.DeclarativeMigrations.Models;
 
 public class DatabaseTable {
-    private ImmutableList<DatabaseTableColumn>? _columns = null;
+    private ConcurrentDictionary<string, DatabaseTableColumn> _columns = [];
+    //private DatabaseTablePrimaryKey _primaryKey = null;
+    private List<DatabaseTableIndex> _indices = [];
+    private List<DatabaseTableUniqueConstraint> _uniqueConstraints = [];
+    private HashSet<string> _tableDependencies = [];
 
     public DatabaseSchema ParentSchema { get; private set; }
     public string Name { get; private set; }
-    public ImmutableList<DatabaseTableColumn> Columns => _columns ?? throw new Exception("Columns have not been set. Use SetColumns method to initialize them.");
+    public IReadOnlyDictionary<string, DatabaseTableColumn> Columns => _columns;
 
     public DatabaseTable(DatabaseSchema parentSchema, string name) {
+        if (parentSchema == null)
+            throw new ArgumentNullException(nameof(parentSchema), "Parent schema cannot be null.");
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Table name cannot be null or whitespace.", nameof(name));
+        if (name.Trim() != name)
+            throw new ArgumentException("Table name cannot contain leading or trailing whitespace.", nameof(name));
+
         ParentSchema = parentSchema;
         Name = name;
     }
 
-    public void SetColumns(IEnumerable<DatabaseTableColumn> columns) {
-        if (columns.Any(x => x.ParentTable != this))
-            throw new Exception("All columns must belong to the same table.");
-
-        _columns = columns.ToImmutableList();
+    internal void AddColumn(DatabaseTableColumn column) {
+        if (column == null)
+            throw new ArgumentNullException(nameof(column), "Column cannot be null.");
+        if (column.ParentTable != this)
+            throw new ArgumentException("Column does not belong to this table.", nameof(column));
+        if (!_columns.TryAdd(column.Name, column))
+            throw new ArgumentException($"Column with name '{column.Name}' already exists in the table.", nameof(column));
     }
 }

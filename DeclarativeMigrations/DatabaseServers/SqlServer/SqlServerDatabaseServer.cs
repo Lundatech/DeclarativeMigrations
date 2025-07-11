@@ -7,9 +7,9 @@ using Lundatech.DeclarativeMigrations.Models;
 
 using Microsoft.Data.SqlClient;
 
-namespace Lundatech.DeclarativeMigrations.Databases;
+namespace Lundatech.DeclarativeMigrations.DatabaseServers.SqlServer;
 
-internal class SqlServerDatabaseServer : IDatabaseServer {
+internal partial class SqlServerDatabaseServer : IDatabaseServer {
     private readonly SqlConnection _connection;
     private bool _connectionIsOpened;
     private readonly IDbTransaction? _transaction;
@@ -20,7 +20,16 @@ internal class SqlServerDatabaseServer : IDatabaseServer {
         _transaction = transaction;
     }
 
-    public async Task<List<DatabaseSchema>> ReadAllSchemas() {
+    //public async Task<List<DatabaseSchema>> ReadAllSchemas() {
+    //    if (!_connectionIsOpened) {
+    //        await _connection.OpenAsync();
+    //        _connectionIsOpened = true;
+    //    }
+
+    //    throw new NotImplementedException();
+    //}
+
+    public async Task<DatabaseSchema> ReadSchema(string schemaName, DatabaseServerOptions options) {
         if (!_connectionIsOpened) {
             await _connection.OpenAsync();
             _connectionIsOpened = true;
@@ -29,16 +38,7 @@ internal class SqlServerDatabaseServer : IDatabaseServer {
         throw new NotImplementedException();
     }
 
-    public async Task<DatabaseSchema> ReadSchema(string schemaName) {
-        if (!_connectionIsOpened) {
-            await _connection.OpenAsync();
-            _connectionIsOpened = true;
-        }
-
-        throw new NotImplementedException();
-    }
-
-    public async Task ApplySchemaMigration(DatabaseSchemaMigration migration) {
+    public async Task ApplySchemaMigration(DatabaseSchemaMigration migration, DatabaseServerOptions options) {
         if (!_connectionIsOpened) {
             await _connection.OpenAsync();
             _connectionIsOpened = true;

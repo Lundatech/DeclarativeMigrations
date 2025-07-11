@@ -15,10 +15,12 @@ public class TableColumnBuilder<TCustomTypes, TCustomTypeProvider> where TCustom
     private bool _isPrimaryKey = false;
     private bool _isNullable = false;
     private DatabaseTableColumnDefaultValue? _defaultValue = null;
+    private DatabaseTableColumnForeignReference? _foreignReference = null;
 
     public TableColumnBuilder(TableBuilder<TCustomTypes, TCustomTypeProvider> parentTableBuilder, DatabaseTable parentTable, TCustomTypeProvider customTypeProvider, string columnName) {
         _parentTableBuilder = parentTableBuilder;
         _parentTable = parentTable;
+        _customTypeProvider = customTypeProvider;
         _columnName = columnName;
     }
 
@@ -93,10 +95,7 @@ public class TableColumnBuilder<TCustomTypes, TCustomTypeProvider> where TCustom
     }
 
     public DatabaseTableColumn BuildColumn() {
-        if (_type == null)
-            throw new InvalidOperationException("Column type must be specified before building the column.");
-
-        return new DatabaseTableColumn(_parentTable, _columnName, _type, _isNullable, _defaultValue);
+        return new DatabaseTableColumn(_parentTable, _columnName, _type, _isNullable, _isPrimaryKey, _defaultValue, _foreignReference);
     }
 
     public DatabaseTable Build() {

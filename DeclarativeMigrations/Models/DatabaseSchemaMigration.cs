@@ -6,6 +6,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
+using Lundatech.DeclarativeMigrations.DatabaseServers;
+
 namespace Lundatech.DeclarativeMigrations.Models;
 
 public class DatabaseSchemaMigration {
@@ -76,7 +78,7 @@ public class DatabaseSchemaMigration {
         }
     };
 
-    public DatabaseSchemaMigration(DatabaseSchema databaseSchema, DatabaseSchema targetSchema, string? migrationTemporaryStorageSchemaName, string migrationTemporaryStorageTablePrefix) {
+    public DatabaseSchemaMigration(DatabaseSchema databaseSchema, DatabaseSchema targetSchema, DatabaseServerOptions options) {
         DatabaseSchema = databaseSchema;
         TargetSchema = targetSchema;
 
@@ -161,6 +163,12 @@ public class DatabaseSchemaMigration {
     //}
 
     private List<string> BuildUpgradeMigration(ImmutableList<SchemaDifference> differences) {
+        // first drop all procedures, functions and views
+
+        // get all table migration scripts
+
+        // lastly, create all procedures, functions and views
+
         var migrationSteps = new List<string>();
         // Logic to build upgrade migration steps based on differences
         // ...

@@ -14,7 +14,7 @@ public class DifferencesTests {
             .WithColumn("id").AsInteger32().AsPrimaryKey()
             .Build();
 
-        var migration = databaseSchema.GetMigrationToTargetSchema(targetSchema);
+        var migration = databaseSchema.GetMigrationToTargetSchema(targetSchema, new());
 
         Assert.That(migration.IsEmpty(), Is.False, "Migration should not be empty.");
         Assert.That(migration.Differences.Count, Is.EqualTo(1), "There should be one difference.");

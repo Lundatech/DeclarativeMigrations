@@ -2,7 +2,7 @@
 using System.Threading.Tasks;
 
 using Lundatech.DeclarativeMigrations.CustomTypes;
-using Lundatech.DeclarativeMigrations.Databases;
+using Lundatech.DeclarativeMigrations.DatabaseServers;
 using Lundatech.DeclarativeMigrations.Models;
 
 using Npgsql;

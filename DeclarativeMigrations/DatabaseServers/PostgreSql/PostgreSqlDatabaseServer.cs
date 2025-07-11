@@ -7,9 +7,9 @@ using Lundatech.DeclarativeMigrations.Models;
 
 using Npgsql;
 
-namespace Lundatech.DeclarativeMigrations.Databases;
+namespace Lundatech.DeclarativeMigrations.DatabaseServers.PostgreSql;
 
-internal class PostgreSqlDatabaseServer : IDatabaseServer {
+internal partial class PostgreSqlDatabaseServer : IDatabaseServer {
     private readonly NpgsqlConnection _connection;
     private bool _connectionIsOpened;
     private readonly NpgsqlTransaction? _transaction;
@@ -20,25 +20,28 @@ internal class PostgreSqlDatabaseServer : IDatabaseServer {
         _transaction = transaction;
     }
 
-    public async Task<List<DatabaseSchema>> ReadAllSchemas() {
+    //public async IAsyncEnumerable<DatabaseSchema> ReadAllSchemas() {
+    //    if (!_connectionIsOpened) {
+    //        await _connection.OpenAsync();
+    //        _connectionIsOpened = true;
+    //    }
+
+    //    var schemaNames = await ReadSchemaNamesFromServer();
+    //    foreach (var schemaName in schemaNames) {
+    //        yield return await ReadSchemaFromServer(schemaName);
+    //    }
+    //}
+
+    public async Task<DatabaseSchema> ReadSchema(string schemaName, DatabaseServerOptions options) {
         if (!_connectionIsOpened) {
             await _connection.OpenAsync();
             _connectionIsOpened = true;
         }
 
-        throw new NotImplementedException();
+        return await ReadSchemaFromServer(schemaName, options);
     }
 
-    public async Task<DatabaseSchema> ReadSchema(string schemaName) {
-        if (!_connectionIsOpened) {
-            await _connection.OpenAsync();
-            _connectionIsOpened = true;
-        }
-
-        throw new NotImplementedException();
-    }
-
-    public async Task ApplySchemaMigration(DatabaseSchemaMigration migration) {
+    public async Task ApplySchemaMigration(DatabaseSchemaMigration migration, DatabaseServerOptions options) {
         if (!_connectionIsOpened) {
             await _connection.OpenAsync();
             _connectionIsOpened = true;
