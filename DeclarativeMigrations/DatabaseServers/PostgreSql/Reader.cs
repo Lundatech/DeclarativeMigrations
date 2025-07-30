@@ -15,12 +15,12 @@ internal partial class PostgreSqlDatabaseServer {
     }
 
     private async Task<bool> TableExists(string schemaName, string tableName) {
-        var query = $"SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = @schema_name AND table_name = @table_name);";
+        var query = $"SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = @schema_name AND table_name = @table_name)";
         await using var command = new NpgsqlCommand(query, _connection, _transaction);
         command.Parameters.AddWithValue("schema_name", schemaName);
         command.Parameters.AddWithValue("table_name", tableName);
         var result = await command.ExecuteScalarAsync();
-        return result is bool exists && exists;
+        return result is bool and true;
     }
 
     private async Task<DatabaseSchema> ReadSchemaFromServer(string schemaName, DatabaseServerOptions options) {
@@ -28,8 +28,7 @@ internal partial class PostgreSqlDatabaseServer {
         var version = new Version(0, 0, 0);
         var (versionTableName, fullVersionTableName) = GetMigrationTableName(options, schemaName, "version");
         if (await TableExists(schemaName, versionTableName)) {
-            var versionQuery = $"SELECT version FROM {fullVersionTableName} LIMIT 1;";
-            await using var command = new NpgsqlCommand(versionQuery, _connection, _transaction);
+            await using var command = new NpgsqlCommand($"SELECT version FROM {fullVersionTableName} LIMIT 1", _connection, _transaction);
             var result = await command.ExecuteScalarAsync();
             if (result != null && result is string versionString) {
                 version = Version.Parse(versionString);
@@ -79,11 +78,6 @@ internal partial class PostgreSqlDatabaseServer {
             DatabaseTableColumnDefaultValue? defaultValue = null;
             DatabaseTableColumnForeignReference? foreignReference = null;
             
-            // var (migrationTableName, fullMigrationTableName) = GetMigrationTableName(options, schema.Name, tableName);
-            // if (await TableExists(schema.Name, migrationTableName)) {
-            //     schema.Tables.Add(new DatabaseTable(tableName, fullMigrationTableName));
-            // }
-
             if (currentTable == null) {
                 currentTable = new DatabaseTable(schema, tableName);
             }
@@ -97,6 +91,9 @@ internal partial class PostgreSqlDatabaseServer {
                 isPrimaryKey, defaultValue, foreignReference);
             currentTable.AddColumn(column);
         }
+        
+        // add the table we we working on 
+        if (currentTable != null) schema.AddTable(currentTable);
     }
 
     private DatabaseType GetDatabaseType(string dataType, int? characterMaximumLength, int? numericPrecision) {

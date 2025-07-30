@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 
 using Lundatech.DeclarativeMigrations.CustomTypes;
 using Lundatech.DeclarativeMigrations.Models;
@@ -112,6 +113,52 @@ public class TableColumnBuilder<TCustomTypes, TCustomTypeProvider> where TCustom
 
     public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> AsPrimaryKey() {
         _isPrimaryKey = true;
+        return this;
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> HavingReferenceTo(string tableName, CascadeType onDeleteCascadeType) {
+        // FIXME
+        return this;
+    }
+
+    private void CheckDefaultValue(params DatabaseType.Standard[] allowedTypes) {
+        if (_type == null) throw new InvalidOperationException($"Can not set default value for column {_columnName} before setting its type");
+        if (allowedTypes.All(x => x != _type.Type))
+            throw new InvalidOperationException($"Can not set default value for column {_columnName} since it is of type {_type.Type}");
+    }
+    
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> DefaultingToRandomGuid() {
+        CheckDefaultValue(DatabaseType.Standard.Guid);
+        
+        // FIXME
+        return this;
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> DefaultingToUtcNow() {
+        CheckDefaultValue(DatabaseType.Standard.DateTime);
+
+        // FIXME
+        return this;
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> DefaultingToNow() {
+        CheckDefaultValue(DatabaseType.Standard.DateTime, DatabaseType.Standard.DateTimeOffset);
+
+        // FIXME
+        return this;
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> DefaultingToValue(Guid defaultValue) {
+        CheckDefaultValue(DatabaseType.Standard.Guid);
+
+        // FIXME
+        return this;
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> DefaultingToValue(bool defaultValue) {
+        CheckDefaultValue(DatabaseType.Standard.Boolean);
+        
+        // FIXME
         return this;
     }
 

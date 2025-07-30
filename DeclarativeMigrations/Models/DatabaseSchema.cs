@@ -10,10 +10,10 @@ namespace Lundatech.DeclarativeMigrations.Models;
 
 public class DatabaseSchema {
     private readonly ConcurrentDictionary<string, DatabaseTable> _tables = [];
-    private readonly ConcurrentDictionary<string, DatabaseUserDefinedType> _types = [];
-    private readonly ConcurrentDictionary<string, DatabaseProcedure> _procedures = [];
-    private readonly ConcurrentDictionary<string, DatabaseFunction> _functions = [];
-    private readonly ConcurrentDictionary<string, DatabaseView> _views = [];
+    // private readonly ConcurrentDictionary<string, DatabaseUserDefinedType> _types = [];
+    // private readonly ConcurrentDictionary<string, DatabaseProcedure> _procedures = [];
+    // private readonly ConcurrentDictionary<string, DatabaseFunction> _functions = [];
+    // private readonly ConcurrentDictionary<string, DatabaseView> _views = [];
 
     public string Name { get; private set; }
     public Version SchemaOrApplicationVersion { get; private set; }
@@ -60,5 +60,9 @@ public class DatabaseSchema {
             throw new ArgumentNullException(nameof(targetSchema), "Target schema cannot be null.");
 
         return new DatabaseSchemaMigration(this, targetSchema, options);
+    }
+
+    public override string ToString() {
+        return $"{Name} {SchemaOrApplicationVersion}";
     }
 }

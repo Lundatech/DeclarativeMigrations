@@ -35,4 +35,8 @@ public class DatabaseTable {
         if (!_columns.TryAdd(column.Name, column))
             throw new ArgumentException($"Column with name '{column.Name}' already exists in the table.", nameof(column));
     }
+    
+    public override string ToString() {
+        return $"{ParentSchema.Name} -> {Name}";
+    }
 }

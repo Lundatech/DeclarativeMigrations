@@ -29,4 +29,8 @@ public class DatabaseTableColumn {
         DefaultValue = defaultValue;
         ForeignReference = foreignReference;
     }
+    
+    public override string ToString() {
+        return $"{ParentTable} -> {Name} {Type}{(IsNullable ? "?" : string.Empty)}{(IsPrimaryKey ? " PK" : string.Empty)}";
+    }
 }
