@@ -11,13 +11,15 @@ public class DatabaseSchemaMigration {
     public DatabaseSchema DatabaseSchema { get; }
     public DatabaseSchema TargetSchema { get; }
     public ImmutableList<SchemaDifference> Differences { get; private set; }
-    public ImmutableList<string> MigrationSteps { get; private set; }
+    // public ImmutableList<string> MigrationSteps { get; private set; }
 
-    //private enum MigrationType {
-    //    Upgrade,
-    //    Downgrade,
-    //    CheckSame,
-    //}
+    public enum MigrationType {
+        Upgrade,
+        Downgrade,
+        Identical
+    }
+    
+    public MigrationType Type { get; }
 
     public class SchemaDifference {
         public enum ObjectType {
@@ -107,20 +109,23 @@ public class DatabaseSchemaMigration {
 
         Differences = GetDifferences().ToImmutableList();
         if (targetSchema.SchemaOrApplicationVersion > databaseSchema.SchemaOrApplicationVersion) {
-            MigrationSteps = BuildUpgradeMigration(Differences).ToImmutableList();
+            Type = MigrationType.Upgrade;
+            // MigrationSteps = BuildUpgradeMigration(Differences).ToImmutableList();
         }
         else if (targetSchema.SchemaOrApplicationVersion < databaseSchema.SchemaOrApplicationVersion) {
-            MigrationSteps = BuildDowngradeMigration(Differences).ToImmutableList();
+            Type = MigrationType.Downgrade;
+            // MigrationSteps = BuildDowngradeMigration(Differences).ToImmutableList();
         }
         else {
             if (Differences.Any())
                 throw new InvalidOperationException("Schema or application versions are the same, but there are differences in the actual schemas.");
 
-            MigrationSteps = ImmutableList<string>.Empty; // No migration needed, schemas are already the same
+            Type = MigrationType.Identical;
+            // MigrationSteps = ImmutableList<string>.Empty; // No migration needed, schemas are already the same
         }
     }
 
-    public bool IsEmpty() => !Differences.Any() && !MigrationSteps.Any();
+    public bool IsEmpty() => !Differences.Any();
 
     private List<SchemaDifference> GetDifferences() {
         var differences = new List<SchemaDifference>();
@@ -231,23 +236,23 @@ public class DatabaseSchemaMigration {
     //    return differences;
     //}
 
-    private List<string> BuildUpgradeMigration(ImmutableList<SchemaDifference> differences) {
-        // first drop all procedures, functions and views
-
-        // get all table migration scripts
-
-        // lastly, create all procedures, functions and views
-
-        var migrationSteps = new List<string>();
-        // Logic to build upgrade migration steps based on differences
-        // ...
-        return migrationSteps;
-    }
-
-    private List<string> BuildDowngradeMigration(ImmutableList<SchemaDifference> differences) {
-        var migrationSteps = new List<string>();
-        // Logic to build downgrade migration steps based on differences
-        // ...
-        return migrationSteps;
-    }
+    // private List<string> BuildUpgradeMigration(ImmutableList<SchemaDifference> differences) {
+    //     // first drop all procedures, functions and views
+    //
+    //     // get all table migration scripts
+    //
+    //     // lastly, create all procedures, functions and views
+    //
+    //     var migrationSteps = new List<string>();
+    //     // Logic to build upgrade migration steps based on differences
+    //     // ...
+    //     return migrationSteps;
+    // }
+    //
+    // private List<string> BuildDowngradeMigration(ImmutableList<SchemaDifference> differences) {
+    //     var migrationSteps = new List<string>();
+    //     // Logic to build downgrade migration steps based on differences
+    //     // ...
+    //     return migrationSteps;
+    // }
 }

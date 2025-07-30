@@ -13,7 +13,7 @@ using Npgsql;
 namespace Lundatech.DeclarativeMigrations.DatabaseServers;
 
 public class DatabaseServer {
-    private readonly IDatabaseServer _databaseServer;
+    private readonly DatabaseServerBase _databaseServer;
     private readonly DatabaseServerOptions _options = new();
 
     public DatabaseServer(DatabaseServerType databaseServerType, string connectionString, Action<DatabaseServerOptions>? configure = null) {

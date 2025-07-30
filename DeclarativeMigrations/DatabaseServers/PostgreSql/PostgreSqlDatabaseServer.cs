@@ -7,7 +7,7 @@ using Npgsql;
 
 namespace Lundatech.DeclarativeMigrations.DatabaseServers.PostgreSql;
 
-internal partial class PostgreSqlDatabaseServer : IDatabaseServer {
+internal partial class PostgreSqlDatabaseServer : DatabaseServerBase {
     private readonly NpgsqlConnection _connection;
     private bool _connectionIsOpened;
     private readonly NpgsqlTransaction? _transaction;
@@ -18,21 +18,10 @@ internal partial class PostgreSqlDatabaseServer : IDatabaseServer {
         _transaction = transaction;
     }
 
-    public async Task<DatabaseSchema> ReadSchema(string schemaName, DatabaseServerOptions options) {
+    public override async Task EnsureConnectionIsOpen() {
         if (!_connectionIsOpened) {
             await _connection.OpenAsync();
             _connectionIsOpened = true;
         }
-
-        return await ReadSchemaFromServer(schemaName, options);
-    }
-
-    public async Task ApplySchemaMigration(DatabaseSchemaMigration migration, DatabaseServerOptions options) {
-        if (!_connectionIsOpened) {
-            await _connection.OpenAsync();
-            _connectionIsOpened = true;
-        }
-
-        throw new NotImplementedException();
     }
 }

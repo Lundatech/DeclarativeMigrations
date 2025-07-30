@@ -4,19 +4,19 @@ namespace Lundatech.DeclarativeMigrations.Models;
 
 public class DatabaseType : IEquatable<DatabaseType> {
     public enum Standard {
-        String,
-        Integer32,
-        SerialInteger32,
-        Integer64,
-        SerialInteger64,
-        Decimal,
+        Binary,
         Boolean,
-        Guid,
+        DatabaseObjectId,
         DateTime,
         DateTimeOffset,
+        Decimal,
+        Guid,
+        Integer32,
+        Integer64,
+        SerialInteger32,
+        SerialInteger64,
+        String,
         TimeSpan,
-        Binary,
-        DatabaseObjectId
     }
 
     public Standard Type { get; private set; }

@@ -14,8 +14,16 @@ internal partial class PostgreSqlDatabaseServer {
         return ($"{options.MigrationTablesPrefix}_{tableName}", $"\"{schemaName}\".\"{options.MigrationTablesPrefix}_{tableName}\"");
     }
 
+    private async Task<bool> SchemaExists(string schemaName) {
+        var query = "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = @schema_name)";
+        await using var command = new NpgsqlCommand(query, _connection, _transaction);
+        command.Parameters.AddWithValue("schema_name", schemaName);
+        var result = await command.ExecuteScalarAsync();
+        return result is bool and true;
+    }
+    
     private async Task<bool> TableExists(string schemaName, string tableName) {
-        var query = $"SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = @schema_name AND table_name = @table_name)";
+        var query = "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = @schema_name AND table_name = @table_name)";
         await using var command = new NpgsqlCommand(query, _connection, _transaction);
         command.Parameters.AddWithValue("schema_name", schemaName);
         command.Parameters.AddWithValue("table_name", tableName);
@@ -23,7 +31,7 @@ internal partial class PostgreSqlDatabaseServer {
         return result is bool and true;
     }
 
-    private async Task<DatabaseSchema> ReadSchemaFromServer(string schemaName, DatabaseServerOptions options) {
+    public override async Task<DatabaseSchema> ReadSchema(string schemaName, DatabaseServerOptions options) {
         // read schema version from server
         var version = new Version(0, 0, 0);
         var (versionTableName, fullVersionTableName) = GetMigrationTableName(options, schemaName, "version");
