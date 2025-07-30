@@ -1,5 +1,5 @@
-﻿namespace Lundatech.DeclarativeMigrations.Models;
-
-public class DatabaseTableUniqueConstraint {
-
-}
+﻿// namespace Lundatech.DeclarativeMigrations.Models;
+//
+// public class DatabaseTableUniqueConstraint {
+//
+// }

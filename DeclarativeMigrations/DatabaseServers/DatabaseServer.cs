@@ -36,10 +36,6 @@ public class DatabaseServer {
         if (configure != null) configure(_options);
     }
 
-    //public async Task<List<DatabaseSchema>> ReadAllSchemas() {
-    //    return await _databaseServer.ReadAllSchemas();
-    //}
-
     public async Task<DatabaseSchema> ReadSchema(string schemaName) {
         return await _databaseServer.ReadSchema(schemaName, _options);
     }

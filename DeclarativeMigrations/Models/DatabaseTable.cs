@@ -1,23 +1,19 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Lundatech.DeclarativeMigrations.Models;
 
 public class DatabaseTable {
-    private ConcurrentDictionary<string, DatabaseTableColumn> _columns = [];
-    //private DatabaseTablePrimaryKey _primaryKey = null;
-    private List<DatabaseTableIndex> _indices = [];
-    private List<DatabaseTableUniqueConstraint> _uniqueConstraints = [];
-    private HashSet<string> _tableDependencies = [];
+    private readonly ConcurrentDictionary<string, DatabaseTableColumn> _columns = [];
+    // private List<DatabaseTableIndex> _indices = [];
 
     public DatabaseSchema ParentSchema { get; private set; }
     public string Name { get; private set; }
     public IReadOnlyDictionary<string, DatabaseTableColumn> Columns => _columns;
 
     public DatabaseTable(DatabaseSchema parentSchema, string name) {
-        if (parentSchema == null)
-            throw new ArgumentNullException(nameof(parentSchema), "Parent schema cannot be null.");
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Table name cannot be null or whitespace.", nameof(name));
         if (name.Trim() != name)
@@ -37,6 +33,6 @@ public class DatabaseTable {
     }
     
     public override string ToString() {
-        return $"{ParentSchema.Name} -> {Name}";
+        return $"{ParentSchema} :: {Name}";
     }
 }

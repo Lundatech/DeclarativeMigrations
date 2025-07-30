@@ -19,15 +19,6 @@ internal partial class SqlServerDatabaseServer : IDatabaseServer {
         _transaction = transaction;
     }
 
-    //public async Task<List<DatabaseSchema>> ReadAllSchemas() {
-    //    if (!_connectionIsOpened) {
-    //        await _connection.OpenAsync();
-    //        _connectionIsOpened = true;
-    //    }
-
-    //    throw new NotImplementedException();
-    //}
-
     public async Task<DatabaseSchema> ReadSchema(string schemaName, DatabaseServerOptions options) {
         if (!_connectionIsOpened) {
             await _connection.OpenAsync();

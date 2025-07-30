@@ -13,11 +13,14 @@ public class TableColumnBuilder<TCustomTypes, TCustomTypeProvider> where TCustom
     private readonly string _columnName;
 
     private DatabaseType? _type = null;
-    private bool _isPrimaryKey = false;
     private bool _isNullable = false;
+    private bool _isPrimaryKey = false;
+    private bool _isUnique = false;
+    private string? _referencesTableName = null;
+    private string? _referencesColumnName = null;
+    private CascadeType? _onDeleteCascadeType = null;
     private DatabaseTableColumnDefaultValue? _defaultValue = null;
-    private DatabaseTableColumnForeignReference? _foreignReference = null;
-
+    
     public TableColumnBuilder(TableBuilder<TCustomTypes, TCustomTypeProvider> parentTableBuilder, DatabaseTable parentTable, TCustomTypeProvider customTypeProvider, string columnName) {
         _parentTableBuilder = parentTableBuilder;
         _parentTable = parentTable;
@@ -116,8 +119,26 @@ public class TableColumnBuilder<TCustomTypes, TCustomTypeProvider> where TCustom
         return this;
     }
 
-    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> HavingReferenceTo(string tableName, CascadeType onDeleteCascadeType) {
-        // FIXME
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> AsUnique() {
+        _isUnique = true;
+        return this;
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> HavingReferenceTo(string foreignTableName, CascadeType onDeleteCascadeType) {
+        if (_referencesTableName != null) throw new InvalidOperationException($"Can not set foreign reference for {_columnName} twice");
+        
+        _referencesTableName = foreignTableName;
+        _referencesColumnName = _columnName;
+        _onDeleteCascadeType = onDeleteCascadeType;
+        return this;
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> HavingReferenceTo(string foreignTableName, string foreignColumnName, CascadeType onDeleteCascadeType) {
+        if (_referencesTableName != null) throw new InvalidOperationException($"Can not set foreign reference for {_columnName} twice");
+        
+        _referencesTableName = foreignTableName;
+        _referencesColumnName = foreignColumnName;
+        _onDeleteCascadeType = onDeleteCascadeType;
         return this;
     }
 
@@ -130,35 +151,35 @@ public class TableColumnBuilder<TCustomTypes, TCustomTypeProvider> where TCustom
     public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> DefaultingToRandomGuid() {
         CheckDefaultValue(DatabaseType.Standard.Guid);
         
-        // FIXME
+        _defaultValue = new DatabaseTableColumnDefaultValue(DatabaseTableColumnDefaultValue.DefaultValueType.RandomGuid);
         return this;
     }
 
     public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> DefaultingToUtcNow() {
-        CheckDefaultValue(DatabaseType.Standard.DateTime);
+        CheckDefaultValue(DatabaseType.Standard.DateTime, DatabaseType.Standard.DateTimeOffset);
 
-        // FIXME
+        _defaultValue = new DatabaseTableColumnDefaultValue(DatabaseTableColumnDefaultValue.DefaultValueType.CurrentDateTimeUtc);
         return this;
     }
 
     public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> DefaultingToNow() {
         CheckDefaultValue(DatabaseType.Standard.DateTime, DatabaseType.Standard.DateTimeOffset);
 
-        // FIXME
+        _defaultValue = new DatabaseTableColumnDefaultValue(DatabaseTableColumnDefaultValue.DefaultValueType.CurrentDateTime);
         return this;
     }
 
     public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> DefaultingToValue(Guid defaultValue) {
         CheckDefaultValue(DatabaseType.Standard.Guid);
 
-        // FIXME
+        _defaultValue = new DatabaseTableColumnDefaultValue(DatabaseTableColumnDefaultValue.DefaultValueType.FixedGuid, guidValue: defaultValue);
         return this;
     }
 
     public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> DefaultingToValue(bool defaultValue) {
         CheckDefaultValue(DatabaseType.Standard.Boolean);
         
-        // FIXME
+        _defaultValue = new DatabaseTableColumnDefaultValue(DatabaseTableColumnDefaultValue.DefaultValueType.FixedBoolean, booleanValue: defaultValue);
         return this;
     }
 
@@ -166,13 +187,13 @@ public class TableColumnBuilder<TCustomTypes, TCustomTypeProvider> where TCustom
         return _parentTableBuilder.WithColumn(columnName);
     }
 
-    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> WithUniqueColumns(params string[] columnNames) {
-        // FIXME
-        return this;
-    }
-    
     public DatabaseTableColumn BuildColumn() {
-        return new DatabaseTableColumn(_parentTable, _columnName, _type, _isNullable, _isPrimaryKey, _defaultValue, _foreignReference);
+        if (_type == null) throw new InvalidOperationException($"Can not build column for {_columnName} since it has no type");
+        DatabaseTableColumnForeignReference? foreignReference = null;
+        if (_referencesTableName != null)
+            foreignReference = new DatabaseTableColumnForeignReference(_referencesTableName, _referencesColumnName!, _onDeleteCascadeType!.Value);
+        var column = new DatabaseTableColumn(_parentTable, _columnName, _type, _isNullable, _isPrimaryKey, _isUnique, _defaultValue, foreignReference);
+        return column;
     }
 
     public DatabaseTable Build() {

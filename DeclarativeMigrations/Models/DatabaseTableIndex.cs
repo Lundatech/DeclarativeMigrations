@@ -1,5 +1,5 @@
-﻿namespace Lundatech.DeclarativeMigrations.Models;
-
-public class DatabaseTableIndex {
-
-}
+﻿// namespace Lundatech.DeclarativeMigrations.Models;
+//
+// public class DatabaseTableIndex {
+//
+// }

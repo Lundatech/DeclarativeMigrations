@@ -42,9 +42,11 @@ public class DatabaseSchemaMigration {
             // Length,
             // Precision,
             // Scale,
-            IsNullable,
+            Nullability,
             DefaultValue,
-            IsPrimaryKey,
+            PrimaryKey,
+            Unique,
+            ForeignReference,
             // ReferencedTable,
             // ReferencedColumn,
             // ReferenceUpdateAction,
@@ -89,8 +91,8 @@ public class DatabaseSchemaMigration {
             };
         }
 
-        public static SchemaDifference CreateColumnTypeDifference(DatabaseTable databaseTable, DatabaseTableColumn databaseTableColumn, DatabaseTable targetTable, DatabaseTableColumn targetTableColumn) {
-            return new SchemaDifference(ObjectType.Column, DifferenceType.Altered, PropertyType.Type) {
+        public static SchemaDifference CreateColumnDifference(PropertyType propertyType, DatabaseTable databaseTable, DatabaseTableColumn databaseTableColumn, DatabaseTable targetTable, DatabaseTableColumn targetTableColumn) {
+            return new SchemaDifference(ObjectType.Column, DifferenceType.Altered, propertyType) {
                 DatabaseTable = databaseTable,
                 TargetTable = targetTable,
                 DatabaseTableColumn = databaseTableColumn,
@@ -149,6 +151,7 @@ public class DatabaseSchemaMigration {
         foreach (var databaseTable in DatabaseSchema.Tables) {
             if (TargetSchema.Tables.TryGetValue(databaseTable.Key, out var targetTable)) {
                 differences.AddRange(GetColumnDifferencesForTable(databaseTable.Value, targetTable));
+                differences.AddRange(GetTableDifferences(databaseTable.Value, targetTable));
             }
         }
 
@@ -179,10 +182,30 @@ public class DatabaseSchemaMigration {
         return differences;
     }
 
+    private List<SchemaDifference> GetTableDifferences(DatabaseTable databaseTable, DatabaseTable targetTable) {
+        var differences = new List<SchemaDifference>();
+
+        // if (databaseTable.Indices != targetTable.Indices)
+        //     ...
+        
+        return differences;
+    }
+    
     private List<SchemaDifference> GetDifferencesForColumn(DatabaseTable databaseTable, DatabaseTableColumn databaseTableColumn, DatabaseTable targetTable, DatabaseTableColumn targetTableColumn) {
         var differences = new List<SchemaDifference>();
 
-        if (databaseTableColumn.Type != targetTableColumn.Type) differences.Add(SchemaDifference.CreateColumnTypeDifference(databaseTable, databaseTableColumn, targetTable, targetTableColumn));
+        if (databaseTableColumn.Type != targetTableColumn.Type) 
+            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.Type, databaseTable, databaseTableColumn, targetTable, targetTableColumn));
+        if (databaseTableColumn.IsNullable != targetTableColumn.IsNullable) 
+            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.Nullability, databaseTable, databaseTableColumn, targetTable, targetTableColumn));
+        if (databaseTableColumn.IsPrimaryKey != targetTableColumn.IsPrimaryKey)
+            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.PrimaryKey, databaseTable, databaseTableColumn, targetTable, targetTableColumn));
+        if (databaseTableColumn.IsUnique != targetTableColumn.IsUnique)
+            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.Unique, databaseTable, databaseTableColumn, targetTable, targetTableColumn));
+        if (databaseTableColumn.DefaultValue != targetTableColumn.DefaultValue)
+            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.DefaultValue, databaseTable, databaseTableColumn, targetTable, targetTableColumn));
+        if (databaseTableColumn.ForeignReference != targetTableColumn.ForeignReference)
+            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.ForeignReference, databaseTable, databaseTableColumn, targetTable, targetTableColumn));
         
         return differences;
     }

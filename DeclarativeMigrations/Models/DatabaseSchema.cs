@@ -63,6 +63,6 @@ public class DatabaseSchema {
     }
 
     public override string ToString() {
-        return $"{Name} {SchemaOrApplicationVersion}";
+        return $"[{Name} {SchemaOrApplicationVersion}]";
     }
 }

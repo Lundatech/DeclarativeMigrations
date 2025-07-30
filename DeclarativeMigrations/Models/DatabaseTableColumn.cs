@@ -8,12 +8,11 @@ public class DatabaseTableColumn {
     public DatabaseType Type { get; private set; }
     public bool IsNullable { get; private set; }
     public bool IsPrimaryKey { get; private set; }
+    public bool IsUnique { get; private set; }
     public DatabaseTableColumnDefaultValue? DefaultValue { get; private set; }
     public DatabaseTableColumnForeignReference? ForeignReference { get; private set; }
 
-    public DatabaseTableColumn(DatabaseTable parentTable, string name, DatabaseType type, bool isNullable, bool isPrimaryKey, DatabaseTableColumnDefaultValue? defaultValue = null, DatabaseTableColumnForeignReference? foreignReference = null) {
-        if (parentTable == null)
-            throw new ArgumentNullException(nameof(parentTable), "Parent table cannot be null.");
+    public DatabaseTableColumn(DatabaseTable parentTable, string name, DatabaseType type, bool isNullable, bool isPrimaryKey, bool isUnique, DatabaseTableColumnDefaultValue? defaultValue, DatabaseTableColumnForeignReference? foreignReference) {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Column name cannot be null or whitespace.", nameof(name));
         if (name.Trim() != name)
@@ -26,11 +25,12 @@ public class DatabaseTableColumn {
         Type = type;
         IsNullable = isNullable;
         IsPrimaryKey = isPrimaryKey;
+        IsUnique = isUnique;
         DefaultValue = defaultValue;
         ForeignReference = foreignReference;
     }
     
     public override string ToString() {
-        return $"{ParentTable} -> {Name} {Type}{(IsNullable ? "?" : string.Empty)}{(IsPrimaryKey ? " PK" : string.Empty)}";
+        return $"{ParentTable}.{Name} {Type}{(IsNullable ? "?" : string.Empty)}{(IsPrimaryKey ? " PK" : string.Empty)}";
     }
 }
