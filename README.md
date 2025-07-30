@@ -1,7 +1,8 @@
 # DeclarativeMigrations
+
 DeclarativeMigrations
 
-# What a schema contains
+## What a schema contains
 
 * DatabaseSchema
 	* DatabaseTable
@@ -15,3 +16,7 @@ DeclarativeMigrations
 	* DatabaseUserDefinedType
 	* DatabaseFunction
 	* DatabaseView
+
+## TODO
+
+[ ] Automatically detect migration order

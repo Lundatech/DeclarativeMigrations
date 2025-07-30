@@ -63,14 +63,76 @@ internal partial class PostgreSqlDatabaseServer {
         await using var command = new NpgsqlCommand(query, _connection, _transaction);
         command.Parameters.AddWithValue("schema_name", schema.Name);
 
+        DatabaseTable? currentTable = null;
+        
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync()) {
-            var tableName = reader.GetString(0);
-            if (string.IsNullOrWhiteSpace(tableName)) continue;
-            var (migrationTableName, fullMigrationTableName) = GetMigrationTableName(options, schema.Name, tableName);
-            if (await TableExists(schema.Name, migrationTableName)) {
-                schema.Tables.Add(new DatabaseTable(tableName, fullMigrationTableName));
+            var tableName = (string)reader["table_name"];
+            var columnName = (string)reader["column_name"];
+            var columnDefault = reader["column_default"] as string;
+            var isNullable = (string)reader["is_nullable"] == "YES";
+            var dataType = (string)reader["data_type"];
+            var characterMaximumLength = reader["character_maximum_length"] as int?;
+            var numericPrecision = reader["numeric_precision"] as int?;
+
+            var isPrimaryKey = false;
+            DatabaseTableColumnDefaultValue? defaultValue = null;
+            DatabaseTableColumnForeignReference? foreignReference = null;
+            
+            // var (migrationTableName, fullMigrationTableName) = GetMigrationTableName(options, schema.Name, tableName);
+            // if (await TableExists(schema.Name, migrationTableName)) {
+            //     schema.Tables.Add(new DatabaseTable(tableName, fullMigrationTableName));
+            // }
+
+            if (currentTable == null) {
+                currentTable = new DatabaseTable(schema, tableName);
             }
+            else if (currentTable.Name != tableName) {
+                schema.AddTable(currentTable);
+                currentTable = new DatabaseTable(schema, tableName);
+            }
+            
+            // add column
+            var column = new DatabaseTableColumn(currentTable, columnName, GetDatabaseType(dataType, characterMaximumLength, numericPrecision), isNullable,
+                isPrimaryKey, defaultValue, foreignReference);
+            currentTable.AddColumn(column);
+        }
+    }
+
+    private DatabaseType GetDatabaseType(string dataType, int? characterMaximumLength, int? numericPrecision) {
+        switch (dataType) {
+            case "character varying":
+                return new DatabaseType(DatabaseType.Standard.String, length: characterMaximumLength);
+            
+            case "uuid":
+                return new DatabaseType(DatabaseType.Standard.Guid);
+            
+            case "integer":
+                return new DatabaseType(DatabaseType.Standard.Integer32);
+            
+            case "bigint":
+                return new DatabaseType(DatabaseType.Standard.Integer64);
+            
+            case "boolean":
+                return new DatabaseType(DatabaseType.Standard.Boolean);
+            
+            case "text":
+                return new DatabaseType(DatabaseType.Standard.String);
+            
+            case "bytea":
+                return new DatabaseType(DatabaseType.Standard.Binary);
+            
+            case "timestamp with time zone":
+                return new DatabaseType(DatabaseType.Standard.DateTimeOffset);
+            
+            case "interval":
+                return new DatabaseType(DatabaseType.Standard.TimeSpan);
+            
+            case "oid":
+                return new DatabaseType(DatabaseType.Standard.DatabaseObjectId);
+            
+            default:
+                throw new NotImplementedException(dataType);
         }
     }
 }

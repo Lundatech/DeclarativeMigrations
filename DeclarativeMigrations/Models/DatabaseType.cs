@@ -6,14 +6,17 @@ public class DatabaseType {
     public enum Standard {
         String,
         Integer32,
+        SerialInteger32,
         Integer64,
+        SerialInteger64,
         Decimal,
         Boolean,
         Guid,
         DateTime,
-        ZonedDateTime,
+        DateTimeOffset,
         TimeSpan,
-        Binary
+        Binary,
+        DatabaseObjectId
     }
 
     public Standard Type { get; private set; }
