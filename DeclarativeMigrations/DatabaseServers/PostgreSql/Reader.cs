@@ -11,7 +11,7 @@ internal partial class PostgreSqlDatabaseServer {
     private (string TableName, string FullTableName) GetMigrationTableName(DatabaseServerOptions options, string schemaName, string tableName) {
         if (string.IsNullOrWhiteSpace(tableName))
             throw new ArgumentException("Table name cannot be null or whitespace.", nameof(tableName));
-        return ($"{options.MigrationTablesPrefix}_{tableName}", $"\"{schemaName}\".\"{options.MigrationTablesPrefix}_{tableName}\"");
+        return ($"_{options.MigrationTablesPrefix}_{tableName}", $"\"{schemaName}\".\"_{options.MigrationTablesPrefix}_{tableName}\"");
     }
 
     private async Task<bool> SchemaExists(string schemaName) {
@@ -45,13 +45,33 @@ internal partial class PostgreSqlDatabaseServer {
             }
         }
 
-        var schema = new DatabaseSchema(schemaName, version);
+        var schema = new DatabaseSchema(DatabaseServerType.PostgreSql, schemaName, version);
 
+        await ReadSequences(schema, options);
         await ReadTables(schema, options);
 
         return schema;
     }
 
+    private async Task ReadSequences(DatabaseSchema schema, DatabaseServerOptions options) {
+        var query = """
+            SELECT
+            	s.sequence_name
+            FROM information_schema.sequences s
+            WHERE s.sequence_schema = @schema_name
+            """;
+           await using var command = new NpgsqlCommand(query, _connection, _transaction);
+        command.Parameters.AddWithValue("schema_name", schema.Name);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync()) {
+            var sequenceName = (string)reader["sequence_name"];
+
+            var sequence = new DatabaseSequence(schema, sequenceName);
+            schema.AddSequence(sequence);
+        }
+    }
+    
     private async Task ReadTables(DatabaseSchema schema, DatabaseServerOptions options) {
         // read all tables from server
         var query = """
@@ -129,6 +149,11 @@ internal partial class PostgreSqlDatabaseServer {
             var foreignColumnName = reader["foreign_column_name"] as string;
             var foreignDeleteRule = reader["foreign_delete_rule"] as string;
 
+            if (tableName.StartsWith($"_{options.MigrationTablesPrefix}_")) {
+                // skip migration tables
+                continue;
+            }
+            
             DatabaseType databaseType = GetDatabaseType(dataType, columnDefault, characterMaximumLength, numericPrecision);
 
             DatabaseTableColumnDefaultValue? defaultValue = null;

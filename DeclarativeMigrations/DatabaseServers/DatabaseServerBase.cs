@@ -15,14 +15,41 @@ internal abstract class DatabaseServerBase {
         // create schema if missing
         await CreateSchemaIfMissing(schemaMigration.DatabaseSchema, options);
         
+        // create missing sequences
+        await CreateMissingSequences(schemaMigration, options);
+        
         // create missing tables
+        await CreateMissingTables(schemaMigration, options);
+        
+        // optionally drop redundant tables
+        await DropRedundantTables(schemaMigration, options);
+        
+        // optionally drop redundant sequences
+        await DropRedundantSequences(schemaMigration, options);
+        
+        // update schema version in database
+        await UpdateSchemaVersion(schemaMigration.TargetSchema, options);;
+    }
+
+    public abstract Task UpdateSchemaVersion(DatabaseSchema schemaMigration, DatabaseServerOptions options);
+    
+    public virtual async Task CreateMissingSequences(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
+        var sequencesToCreate = schemaMigration.Differences
+            .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.Sequence && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Added).ToList();
+        foreach (var difference in sequencesToCreate) {
+            await CreateSequence(difference, options);
+        }
+    }
+    
+    public virtual async Task CreateMissingTables(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
         var tablesToCreate = schemaMigration.Differences
             .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.Table && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Added).ToList();
         foreach (var difference in tablesToCreate) {
             await CreateTable(difference, options);
         }
-        
-        // optionally drop redundant tables
+    }
+    
+    public virtual async Task DropRedundantTables(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
         var tablesToDrop = schemaMigration.Differences
             .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.Table && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Dropped).ToList();
         // never drop tables when downgrading
@@ -32,8 +59,31 @@ internal abstract class DatabaseServerBase {
             }
         }
     }
-
+    
+    public virtual async Task DropRedundantSequences(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
+        var sequencesToDrop = schemaMigration.Differences
+            .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.Sequence && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Dropped).ToList();
+        // never drop sequences when downgrading
+        if (schemaMigration.Type == DatabaseSchemaMigration.MigrationType.Upgrade && options.DropRemovedSequencesOnUpgrade) {
+            foreach (var difference in sequencesToDrop) {
+                await DropSequence(difference, options);
+            }
+        }
+    }
+    
     public abstract Task CreateSchemaIfMissing(DatabaseSchema schema, DatabaseServerOptions options);
+    
+    public virtual async Task CreateSequence(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        var script = $"CREATE SEQUENCE {GetQuotedSequenceName(difference.TargetSequence!, options)}";
+        await ExecuteScript(script, options);
+    }
+
+    public abstract string GetQuotedSequenceName(DatabaseSequence sequence, DatabaseServerOptions options);
+    
+    public virtual async Task DropSequence(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        var script = $"DROP SEQUENCE {GetQuotedSequenceName(difference.DatabaseSequence!, options)}";
+        await ExecuteScript(script, options);
+    }
     
     public virtual async Task CreateTable(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
         var script = $"CREATE TABLE {GetQuotedTableName(difference.TargetTable!, options)} ({string.Join(", ", difference.TargetTable!.Columns.Values.Select(x => GetTableColumnCreateScript(x, options)))}{GetTableExtraCreateScript(difference.TargetTable!, options)})";
@@ -71,4 +121,10 @@ internal abstract class DatabaseServerBase {
     
     public abstract string GetQuotedTableName(DatabaseTable table, DatabaseServerOptions options);
     public abstract Task ExecuteScript(string script, DatabaseServerOptions options);
+
+    public virtual void TableBuilderHook(DatabaseTable table) {
+    }
+    
+    public virtual void TableColumnBuilderHook(DatabaseTableColumn tableColumn) {
+    }
 }

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 
 using Lundatech.DeclarativeMigrations.Builders;
 using Lundatech.DeclarativeMigrations.CustomTypes;
@@ -9,6 +10,7 @@ using Lundatech.DeclarativeMigrations.DatabaseServers;
 namespace Lundatech.DeclarativeMigrations.Models;
 
 public class DatabaseSchema {
+    private readonly DatabaseServerBase _databaseServer;
     private readonly ConcurrentDictionary<string, DatabaseTable> _tables = [];
     private readonly ConcurrentDictionary<string, DatabaseSequence> _sequences = [];
     
@@ -22,7 +24,8 @@ public class DatabaseSchema {
     public IReadOnlyDictionary<string, DatabaseTable> Tables => _tables;
     public IReadOnlyDictionary<string, DatabaseSequence> Sequences => _sequences;
 
-    public DatabaseSchema(string name, Version schemaOrApplicationVersion) {
+    public DatabaseSchema(DatabaseServerType databaseServerType, string name, Version schemaOrApplicationVersion) {
+        _databaseServer = DatabaseServer.CreateSupportInstance(databaseServerType);
         Name = name;
         SchemaOrApplicationVersion = schemaOrApplicationVersion;
     }
@@ -35,7 +38,7 @@ public class DatabaseSchema {
         //if (_tables.ContainsKey(tableName))
         //    throw new ArgumentException($"Table with name '{tableName}' already exists in the schema.", nameof(tableName));
 
-        return new TableBuilder<TCustomTypes, TCustomTypeProvider>(this, tableName, customTypeProvider);
+        return new TableBuilder<TCustomTypes, TCustomTypeProvider>(this, tableName, customTypeProvider, _databaseServer);
     }
 
     public TableBuilder<NullCustomTypes, NullCustomTypeProvider> AddStandardTable(string tableName) {
@@ -46,7 +49,7 @@ public class DatabaseSchema {
         //if (_tables.ContainsKey(tableName))
         //    throw new ArgumentException($"Table with name '{tableName}' already exists in the schema.", nameof(tableName));
 
-        return new TableBuilder<NullCustomTypes, NullCustomTypeProvider>(this, tableName, new NullCustomTypeProvider());
+        return new TableBuilder<NullCustomTypes, NullCustomTypeProvider>(this, tableName, new NullCustomTypeProvider(), _databaseServer);
     }
 
     internal void AddTable(DatabaseTable table) {
@@ -74,6 +77,34 @@ public class DatabaseSchema {
         return new DatabaseSchemaMigration(this, targetSchema, options);
     }
 
+    public List<DatabaseTable> GetOrderedTables() {
+        var orderedTables = new List<DatabaseTable>();
+
+        // start by adding all tables that have no references to other tables and then add tables that reference those tables
+        AddTables(orderedTables, new HashSet<string>());
+        
+        return orderedTables;
+    }
+
+    private void AddTables(List<DatabaseTable> orderedTables, HashSet<string> addedTables) {
+        // get all tables that have not yet been added and references only added tables
+        var tablesToAdd = _tables.Values
+            .Where(x => !addedTables.Contains(x.Name))
+            .Where(x => x.GetTableReferences().All(addedTables.Contains))
+            .ToList();
+
+        foreach (var tableToAdd in tablesToAdd) {
+            orderedTables.Add(tableToAdd);
+            addedTables.Add(tableToAdd.Name);
+        }
+        
+        // any more tables to add?
+        if (_tables.Count > orderedTables.Count) {
+            // recursively call to add more tables
+            AddTables(orderedTables, addedTables);
+        }
+    }
+    
     public override string ToString() {
         return $"[{Name} {SchemaOrApplicationVersion}]";
     }

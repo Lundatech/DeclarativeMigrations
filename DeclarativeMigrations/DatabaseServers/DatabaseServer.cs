@@ -15,7 +15,7 @@ namespace Lundatech.DeclarativeMigrations.DatabaseServers;
 public class DatabaseServer {
     private readonly DatabaseServerBase _databaseServer;
     private readonly DatabaseServerOptions _options = new();
-
+   
     public DatabaseServer(DatabaseServerType databaseServerType, string connectionString, Action<DatabaseServerOptions>? configure = null) {
         _databaseServer = databaseServerType switch {
             DatabaseServerType.SqlServer => new SqlServerDatabaseServer(new SqlConnection(connectionString), false, null),
@@ -36,6 +36,14 @@ public class DatabaseServer {
         if (configure != null) configure(_options);
     }
 
+    internal static DatabaseServerBase CreateSupportInstance(DatabaseServerType databaseServerType) {
+        return databaseServerType switch {
+            DatabaseServerType.SqlServer => new SqlServerDatabaseServer(new SqlConnection(), false, null),
+            DatabaseServerType.PostgreSql => new PostgreSqlDatabaseServer(new NpgsqlConnection(), false, null),
+            _ => throw new NotSupportedException($"Database server type '{databaseServerType}' is not supported.")
+        };
+    }
+    
     public async Task<DatabaseSchema> ReadSchema(string schemaName) {
         return await _databaseServer.ReadSchema(schemaName, _options);
     }

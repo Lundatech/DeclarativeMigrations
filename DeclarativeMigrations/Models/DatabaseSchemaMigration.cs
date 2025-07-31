@@ -16,13 +16,14 @@ public class DatabaseSchemaMigration {
     public enum MigrationType {
         Upgrade,
         Downgrade,
-        Identical
+        SameVersion
     }
     
     public MigrationType Type { get; }
 
     public class SchemaDifference {
         public enum ObjectType {
+            Sequence,
             Table,
             Column,
             //Type,
@@ -60,6 +61,9 @@ public class DatabaseSchemaMigration {
         public DifferenceType Type { get; }
         public PropertyType? Property { get; }
 
+        public DatabaseSequence? DatabaseSequence { get; private set; }
+        public DatabaseSequence? TargetSequence { get; private set; }
+        
         public DatabaseTable? DatabaseTable { get; private set; }
         public DatabaseTable? TargetTable { get; private set; }
         
@@ -77,6 +81,13 @@ public class DatabaseSchemaMigration {
             Property = propertyType;
         }
 
+        public static SchemaDifference CreateSequenceDifference(DifferenceType differenceType, DatabaseSequence? databaseSequence, DatabaseSequence? targetSequence) {
+            return new SchemaDifference(ObjectType.Sequence, differenceType, null) {
+                DatabaseSequence = databaseSequence,
+                TargetSequence = targetSequence
+            };
+        }
+        
         public static SchemaDifference CreateTableDifference(DifferenceType differenceType, DatabaseTable? databaseTable, DatabaseTable? targetTable) {
             return new SchemaDifference(ObjectType.Table, differenceType, null) {
                 DatabaseTable = databaseTable,
@@ -120,7 +131,7 @@ public class DatabaseSchemaMigration {
             if (Differences.Any())
                 throw new InvalidOperationException("Schema or application versions are the same, but there are differences in the actual schemas.");
 
-            Type = MigrationType.Identical;
+            Type = MigrationType.SameVersion;
             // MigrationSteps = ImmutableList<string>.Empty; // No migration needed, schemas are already the same
         }
     }
@@ -130,6 +141,7 @@ public class DatabaseSchemaMigration {
     private List<SchemaDifference> GetDifferences() {
         var differences = new List<SchemaDifference>();
 
+        differences.AddRange(GetSequenceDifferences());
         differences.AddRange(GetTableDifferences());
         //differences.AddRange(GetTypeDifferences());
         //differences.AddRange(GetProcedureDifferences());
@@ -138,12 +150,32 @@ public class DatabaseSchemaMigration {
         return differences;
     }
 
+    private List<SchemaDifference> GetSequenceDifferences() {
+        var differences = new List<SchemaDifference>();
+
+        foreach (var targetSequence in TargetSchema.Sequences) {
+            if (!DatabaseSchema.Sequences.ContainsKey(targetSequence.Key)) {
+                differences.Add(SchemaDifference.CreateSequenceDifference(SchemaDifference.DifferenceType.Added, null, targetSequence.Value));
+            }
+        }
+        
+        foreach (var databaseSequence in DatabaseSchema.Sequences) {
+            if (!TargetSchema.Sequences.ContainsKey(databaseSequence.Key)) {
+                differences.Add(SchemaDifference.CreateSequenceDifference(SchemaDifference.DifferenceType.Dropped, databaseSequence.Value, null));
+            }
+        }
+        
+        // no altered needed
+        
+        return differences;
+    }
+    
     private List<SchemaDifference> GetTableDifferences() {
         var differences = new List<SchemaDifference>();
 
-        foreach (var targetTable in TargetSchema.Tables) {
-            if (!DatabaseSchema.Tables.ContainsKey(targetTable.Key)) {
-                differences.Add(SchemaDifference.CreateTableDifference(SchemaDifference.DifferenceType.Added, null, targetTable.Value));
+        foreach (var targetTable in TargetSchema.GetOrderedTables()) {
+            if (!DatabaseSchema.Tables.ContainsKey(targetTable.Name)) {
+                differences.Add(SchemaDifference.CreateTableDifference(SchemaDifference.DifferenceType.Added, null, targetTable));
             }
         }
 

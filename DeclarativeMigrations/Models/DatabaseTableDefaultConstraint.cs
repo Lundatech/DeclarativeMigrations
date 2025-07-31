@@ -15,5 +15,4 @@ public class DatabaseTableDefaultConstraint {
         ParentTable = parentTable;
         Name = name;
     }
-
 }

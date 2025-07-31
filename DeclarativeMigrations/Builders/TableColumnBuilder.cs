@@ -2,6 +2,7 @@
 using System.Linq;
 
 using Lundatech.DeclarativeMigrations.CustomTypes;
+using Lundatech.DeclarativeMigrations.DatabaseServers;
 using Lundatech.DeclarativeMigrations.Models;
 
 namespace Lundatech.DeclarativeMigrations.Builders;
@@ -10,6 +11,7 @@ public class TableColumnBuilder<TCustomTypes, TCustomTypeProvider> where TCustom
     private readonly TableBuilder<TCustomTypes, TCustomTypeProvider> _parentTableBuilder;
     private readonly DatabaseTable _parentTable;
     private readonly TCustomTypeProvider _customTypeProvider;
+    private readonly DatabaseServerBase _databaseServer;
     private readonly string _columnName;
 
     private DatabaseType? _type = null;
@@ -21,10 +23,11 @@ public class TableColumnBuilder<TCustomTypes, TCustomTypeProvider> where TCustom
     private CascadeType? _onDeleteCascadeType = null;
     private DatabaseTableColumnDefaultValue? _defaultValue = null;
     
-    public TableColumnBuilder(TableBuilder<TCustomTypes, TCustomTypeProvider> parentTableBuilder, DatabaseTable parentTable, TCustomTypeProvider customTypeProvider, string columnName) {
+    internal TableColumnBuilder(TableBuilder<TCustomTypes, TCustomTypeProvider> parentTableBuilder, DatabaseTable parentTable, TCustomTypeProvider customTypeProvider, DatabaseServerBase databaseServer, string columnName) {
         _parentTableBuilder = parentTableBuilder;
         _parentTable = parentTable;
         _customTypeProvider = customTypeProvider;
+        _databaseServer = databaseServer;
         _columnName = columnName;
     }
 

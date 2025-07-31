@@ -58,7 +58,42 @@ public class DatabaseTable {
         if (!_defaultConstraints.TryAdd(defaultConstraint.Name, defaultConstraint))
             throw new ArgumentException($"Default constraint with name '{defaultConstraint.Name}' already exists in the table.", nameof(defaultConstraint));
     }
+
+    internal void AddNullabilityConstraint(DatabaseTableNullabilityConstraint nullabilityConstraint) {
+        if (nullabilityConstraint == null)
+            throw new ArgumentNullException(nameof(nullabilityConstraint), "Nullability constraint cannot be null.");
+        if (nullabilityConstraint.ParentTable != this)
+            throw new ArgumentException("Nullability constraint does not belong to this table.", nameof(nullabilityConstraint));
+        if (!_nullabilityConstraints.TryAdd(nullabilityConstraint.Name, nullabilityConstraint))
+            throw new ArgumentException($"Nullability constraint with name '{nullabilityConstraint.Name}' already exists in the table.", nameof(nullabilityConstraint));
+    }
     
+    internal void AddPrimaryKeyConstraint(DatabaseTablePrimaryKeyConstraint primaryKeyConstraint) {
+        if (primaryKeyConstraint == null)
+            throw new ArgumentNullException(nameof(primaryKeyConstraint), "Primary key constraint cannot be null.");
+        if (primaryKeyConstraint.ParentTable != this)
+            throw new ArgumentException("Primary key constraint does not belong to this table.", nameof(primaryKeyConstraint));
+        if (!_primaryKeyConstraints.TryAdd(primaryKeyConstraint.Name, primaryKeyConstraint))
+            throw new ArgumentException($"Primary key constraint with name '{primaryKeyConstraint.Name}' already exists in the table.", nameof(primaryKeyConstraint));
+    }
+    
+    internal void AddIndex(DatabaseTableIndex index) {
+        if (index == null)
+            throw new ArgumentNullException(nameof(index), "Index cannot be null.");
+        if (index.ParentTable != this)
+            throw new ArgumentException("Index does not belong to this table.", nameof(index));
+        if (!_indices.TryAdd(index.Name, index))
+            throw new ArgumentException($"Index with name '{index.Name}' already exists in the table.", nameof(index));
+    }
+
+    public List<string> GetTableReferences() {
+        return _columns.Values
+            .Where(x => x.ForeignReference != null)
+            .Select(x => x.ForeignReference!.ForeignTableName)
+            .Distinct()
+            .ToList();
+    }
+
     public override string ToString() {
         return $"{ParentSchema} :: {Name}";
     }
