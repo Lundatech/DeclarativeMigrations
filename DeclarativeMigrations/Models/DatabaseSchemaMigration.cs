@@ -11,7 +11,6 @@ public class DatabaseSchemaMigration {
     public DatabaseSchema DatabaseSchema { get; }
     public DatabaseSchema TargetSchema { get; }
     public ImmutableList<SchemaDifference> Differences { get; private set; }
-    // public ImmutableList<string> MigrationSteps { get; private set; }
 
     public enum MigrationType {
         Upgrade,
@@ -121,18 +120,15 @@ public class DatabaseSchemaMigration {
         Differences = GetDifferences().ToImmutableList();
         if (targetSchema.SchemaOrApplicationVersion > databaseSchema.SchemaOrApplicationVersion) {
             Type = MigrationType.Upgrade;
-            // MigrationSteps = BuildUpgradeMigration(Differences).ToImmutableList();
         }
         else if (targetSchema.SchemaOrApplicationVersion < databaseSchema.SchemaOrApplicationVersion) {
             Type = MigrationType.Downgrade;
-            // MigrationSteps = BuildDowngradeMigration(Differences).ToImmutableList();
         }
         else {
             if (Differences.Any())
                 throw new InvalidOperationException("Schema or application versions are the same, but there are differences in the actual schemas.");
 
             Type = MigrationType.SameVersion;
-            // MigrationSteps = ImmutableList<string>.Empty; // No migration needed, schemas are already the same
         }
     }
 
