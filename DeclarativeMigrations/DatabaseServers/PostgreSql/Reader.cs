@@ -49,6 +49,7 @@ internal partial class PostgreSqlDatabaseServer {
 
         await ReadSequences(schema, options);
         await ReadTables(schema, options);
+        await ReadIndices(schema, options);
 
         return schema;
     }
@@ -127,6 +128,73 @@ internal partial class PostgreSqlDatabaseServer {
             	ON c.table_schema = t.table_schema AND c.table_name = t.table_name
             WHERE t.table_schema = @schema_name
             ORDER by t.table_name ASC, c.ordinal_position ASC
+            """;
+        await using var command = new NpgsqlCommand(query, _connection, _transaction);
+        command.Parameters.AddWithValue("schema_name", schema.Name);
+
+        DatabaseTable? currentTable = null;
+
+        await using var reader = await command.ExecuteReaderAsync();
+
+        while (await reader.ReadAsync()) {
+            var tableName = (string)reader["table_name"];
+            var columnName = (string)reader["column_name"];
+            var columnDefault = reader["column_default"] as string;
+            var isNullable = (string)reader["is_nullable"] == "YES";
+            var dataType = (string)reader["data_type"];
+            var characterMaximumLength = reader["character_maximum_length"] as int?;
+            var numericPrecision = reader["numeric_precision"] as int?;
+            var isPrimaryKey = (bool)reader["is_primary_key"];
+            var isUnique = (bool)reader["is_unique"];
+            var foreignTableName = reader["foreign_table_name"] as string;
+            var foreignColumnName = reader["foreign_column_name"] as string;
+            var foreignDeleteRule = reader["foreign_delete_rule"] as string;
+
+            if (tableName.StartsWith($"_{options.MigrationTablesPrefix}_")) {
+                // skip migration tables
+                continue;
+            }
+            
+            DatabaseType databaseType = GetDatabaseType(dataType, columnDefault, characterMaximumLength, numericPrecision);
+
+            DatabaseTableColumnDefaultValue? defaultValue = null;
+            if (columnDefault != null) defaultValue = GetColumnDefault(columnDefault, databaseType);
+
+            DatabaseTableColumnForeignReference? foreignReference = null;
+
+            if (foreignDeleteRule != null) {
+                var onDeleteCascadeType = foreignDeleteRule switch {
+                    "RESTRICT" => CascadeType.Restrict,
+                    "CASCADE" => CascadeType.Cascade,
+                    "SET DEFAULT" => CascadeType.SetDefault,
+                    "SET NULL" => CascadeType.SetNull,
+                    "NO ACTION" => CascadeType.NoAction,
+                    _ => throw new NotImplementedException(foreignDeleteRule),
+                };
+                foreignReference = new DatabaseTableColumnForeignReference(foreignTableName!, foreignColumnName!, onDeleteCascadeType);
+            }
+
+            if (currentTable == null) {
+                currentTable = new DatabaseTable(schema, tableName);
+            }
+            else if (currentTable.Name != tableName) {
+                schema.AddTable(currentTable);
+                currentTable = new DatabaseTable(schema, tableName);
+            }
+
+            // add column
+            var column = new DatabaseTableColumn(currentTable, columnName, databaseType, isNullable,
+                isPrimaryKey, isUnique, defaultValue, foreignReference);
+            currentTable.AddColumn(column);
+        }
+
+        // add the table we we working on 
+        if (currentTable != null) schema.AddTable(currentTable);
+    }
+    
+    private async Task ReadIndices(DatabaseSchema schema, DatabaseServerOptions options) {
+        // read all indices from server
+        var query = """
             """;
         await using var command = new NpgsqlCommand(query, _connection, _transaction);
         command.Parameters.AddWithValue("schema_name", schema.Name);

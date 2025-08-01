@@ -24,7 +24,7 @@ public class DatabaseSchemaMigration {
         public enum ObjectType {
             Sequence,
             Table,
-            Column,
+            TableColumn,
             //Type,
             //Procedure,
             //TableContent,
@@ -95,7 +95,7 @@ public class DatabaseSchemaMigration {
         }
 
         public static SchemaDifference CreateTableColumnDifference(DifferenceType differenceType, DatabaseTable databaseTable, DatabaseTableColumn? databaseTableColumn, DatabaseTable targetTable, DatabaseTableColumn? targetTableColumn) {
-            return new SchemaDifference(ObjectType.Column, differenceType, null) {
+            return new SchemaDifference(ObjectType.TableColumn, differenceType, null) {
                 DatabaseTable = databaseTable,
                 TargetTable = targetTable,
                 DatabaseTableColumn = databaseTableColumn,
@@ -104,7 +104,7 @@ public class DatabaseSchemaMigration {
         }
 
         public static SchemaDifference CreateColumnDifference(PropertyType propertyType, DatabaseTable databaseTable, DatabaseTableColumn databaseTableColumn, DatabaseTable targetTable, DatabaseTableColumn targetTableColumn) {
-            return new SchemaDifference(ObjectType.Column, DifferenceType.Altered, propertyType) {
+            return new SchemaDifference(ObjectType.TableColumn, DifferenceType.Altered, propertyType) {
                 DatabaseTable = databaseTable,
                 TargetTable = targetTable,
                 DatabaseTableColumn = databaseTableColumn,

@@ -21,6 +21,15 @@ internal abstract class DatabaseServerBase {
         // create missing tables
         await CreateMissingTables(schemaMigration, options);
         
+        // create missing table columns
+        await CreateMissingTableColumns(schemaMigration, options);
+        
+        // handle altered table columns
+        await AlterTableColumns(schemaMigration, options);
+        
+        // optionally drop redundant table columns
+        await DropRedundantTableColumns(schemaMigration, options);
+        
         // optionally drop redundant tables
         await DropRedundantTables(schemaMigration, options);
         
@@ -46,6 +55,38 @@ internal abstract class DatabaseServerBase {
             .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.Table && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Added).ToList();
         foreach (var difference in tablesToCreate) {
             await CreateTable(difference, options);
+        }
+    }
+    
+    public virtual async Task CreateMissingTableColumns(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
+        var tableColumnsToCreate = schemaMigration.Differences
+            .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.TableColumn && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Added).ToList();
+        foreach (var difference in tableColumnsToCreate) {
+            await CreateTableColumn(difference, options);
+        }
+    }
+    
+    public virtual async Task AlterTableColumns(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
+        var tableColumnsToAlter = schemaMigration.Differences
+            .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.TableColumn && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Altered).ToList();
+        foreach (var difference in tableColumnsToAlter) {
+            await AlterTableColumn(difference, options);
+        }
+    }
+
+    public virtual async Task AlterTableColumn(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        var script = $"ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)} ALTER COLUMN {GetTableColumnCreateScript(difference.DatabaseTableColumn!, options)}";
+        await ExecuteScript(script, options);
+    }
+    
+    public virtual async Task DropRedundantTableColumns(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
+        var tableColumnsToDrop = schemaMigration.Differences
+            .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.TableColumn && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Dropped).ToList();
+        // never drop table columns when downgrading
+        if (schemaMigration.Type == DatabaseSchemaMigration.MigrationType.Upgrade && options.DropRemovedTableColumnsOnUpgrade) {
+            foreach (var difference in tableColumnsToDrop) {
+                await DropTableColumn(difference, options);
+            }
         }
     }
     
@@ -90,6 +131,11 @@ internal abstract class DatabaseServerBase {
         await ExecuteScript(script, options);
     }
 
+    public virtual async Task CreateTableColumn(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        var script = $"ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)} ADD COLUMN {GetTableColumnCreateScript(difference.DatabaseTableColumn!, options)}";
+        await ExecuteScript(script, options);
+    }
+    
     public virtual string GetTableColumnCreateScript(DatabaseTableColumn tableColumn, DatabaseServerOptions options) {
         return $"{GetQuotedTableColumnName(tableColumn, options)} {GetTableColumnDataTypeScript(tableColumn, options)}{GetTableColumnExtraCreateScript(tableColumn, options)}";
     }
@@ -116,6 +162,11 @@ internal abstract class DatabaseServerBase {
     
     public virtual async Task DropTable(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
         var script = $"DROP TABLE {GetQuotedTableName(difference.DatabaseTable!, options)}";
+        await ExecuteScript(script, options);
+    }
+    
+    public virtual async Task DropTableColumn(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        var script = $"ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)} DROP COLUMN {GetQuotedTableColumnName(difference.DatabaseTableColumn!, options)}";
         await ExecuteScript(script, options);
     }
     

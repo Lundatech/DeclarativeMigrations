@@ -185,18 +185,21 @@ public class TableColumnBuilder<TCustomTypes, TCustomTypeProvider> where TCustom
         _defaultValue = new DatabaseTableColumnDefaultValue(DatabaseTableColumnDefaultValue.DefaultValueType.FixedBoolean, booleanValue: defaultValue);
         return this;
     }
-
-    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> WithColumn(string columnName) {
-        return _parentTableBuilder.WithColumn(columnName);
-    }
-
+   
     public DatabaseTableColumn BuildColumn() {
         if (_type == null) throw new InvalidOperationException($"Can not build column for {_columnName} since it has no type");
         DatabaseTableColumnForeignReference? foreignReference = null;
         if (_referencesTableName != null)
             foreignReference = new DatabaseTableColumnForeignReference(_referencesTableName, _referencesColumnName!, _onDeleteCascadeType!.Value);
-        var column = new DatabaseTableColumn(_parentTable, _columnName, _type, _isNullable, _isPrimaryKey, _isUnique, _defaultValue, foreignReference);
-        return column;
+        return new DatabaseTableColumn(_parentTable, _columnName, _type, _isNullable, _isPrimaryKey, _isUnique, _defaultValue, foreignReference);
+    }
+
+    public TableIndexBuilder<TCustomTypes, TCustomTypeProvider> WithIndex(params string[] columnNames) {
+        return _parentTableBuilder.WithIndex(columnNames);
+    }
+
+    public TableColumnBuilder<TCustomTypes, TCustomTypeProvider> WithColumn(string columnName) {
+        return _parentTableBuilder.WithColumn(columnName);
     }
 
     public DatabaseTable Build() {
