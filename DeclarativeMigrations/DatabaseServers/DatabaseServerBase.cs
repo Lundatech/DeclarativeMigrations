@@ -43,6 +43,9 @@ internal abstract class DatabaseServerBase {
         // create missing table indexes
         await CreateMissingTableIndexes(schemaMigration, options);
 
+        // handle altered tables
+        await AlterTables(schemaMigration, options);
+
         // handle altered table indexes
         await AlterTableIndexes(schemaMigration, options);
 
@@ -120,10 +123,50 @@ internal abstract class DatabaseServerBase {
         }
     }
 
-    public virtual async Task AlterTableColumn(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
-        var script = $"ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)} ALTER COLUMN {GetTableColumnCreateScript(difference.DatabaseTableColumn!, options)}";
-        await ExecuteScript(script, options);
+    public async Task AlterTables(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
+        var indexesToAlter = schemaMigration.Differences
+            .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.Table && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Altered).ToList();
+        foreach (var difference in indexesToAlter) {
+            await AlterTable(difference, options);
+            difference.SetHandled();
+        }
     }
+
+    public virtual async Task AlterTable(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        if (difference.Property == DatabaseSchemaMigration.SchemaDifference.PropertyType.PrimaryKey) {
+            await AlterTablePrimaryKey(difference, options);
+        }
+        else {
+            throw new NotSupportedException($"Property '{difference.Property}' is not supported for altering tables.");
+        }
+    }
+
+    public abstract Task AlterTablePrimaryKey(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options);
+
+    public virtual async Task AlterTableColumn(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        if (difference.Property == DatabaseSchemaMigration.SchemaDifference.PropertyType.Type) {
+            await AlterTableColumnType(difference, options);
+        }
+        else if (difference.Property == DatabaseSchemaMigration.SchemaDifference.PropertyType.DefaultValue) {
+            await AlterTableColumnDefaultValue(difference, options);
+        }
+        else if (difference.Property == DatabaseSchemaMigration.SchemaDifference.PropertyType.Nullability) {
+            await AlterTableColumnNullability(difference, options);
+        }
+        else if (difference.Property == DatabaseSchemaMigration.SchemaDifference.PropertyType.PrimaryKey) {
+            await AlterTableColumnPrimaryKey(difference, options);
+        }
+        else {
+            throw new NotSupportedException($"Property '{difference.Property}' is not supported for altering table columns.");
+        }
+        //var script = $"ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)} ALTER COLUMN {GetTableColumnCreateScript(difference.TargetTableColumn!, options)}";
+        //await ExecuteScript(script, options);
+    }
+
+    public abstract Task AlterTableColumnType(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options);
+    public abstract Task AlterTableColumnDefaultValue(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options);
+    public abstract Task AlterTableColumnNullability(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options);
+    public abstract Task AlterTableColumnPrimaryKey(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options);
 
     public async Task DropRedundantTableColumns(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
         var tableColumnsToDrop = schemaMigration.Differences
@@ -181,14 +224,14 @@ internal abstract class DatabaseServerBase {
     }
 
     public virtual async Task CreateTableIndex(DatabaseTableIndex tableIndex, DatabaseServerOptions options) {
-        var script = $"CREATE INDEX {GetQuotedTableIndexName(tableIndex, options)} ON {GetQuotedTableName(tableIndex.ParentTable, options)} ({string.Join(", ", tableIndex.ColumnNames.Select(x => GetQuotedTableColumnName(tableIndex.ParentTable.Columns[x], options)))})";
+        var script = $"CREATE INDEX {GetQuotedTableIndexName(tableIndex, false, options)} ON {GetQuotedTableName(tableIndex.ParentTable, options)} ({string.Join(", ", tableIndex.ColumnNames.Select(x => GetQuotedTableColumnName(tableIndex.ParentTable.Columns[x], options)))})";
         await ExecuteScript(script, options);
     }
 
-    public abstract string GetQuotedTableIndexName(DatabaseTableIndex tableIndex, DatabaseServerOptions options);
+    public abstract string GetQuotedTableIndexName(DatabaseTableIndex tableIndex, bool includeSchema, DatabaseServerOptions options);
 
     public virtual async Task CreateTableColumn(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
-        var script = $"ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)} ADD COLUMN {GetTableColumnCreateScript(difference.DatabaseTableColumn!, options)}";
+        var script = $"ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)} ADD COLUMN {GetTableColumnCreateScript(difference.TargetTableColumn!, options)}";
         await ExecuteScript(script, options);
     }
 
@@ -222,7 +265,7 @@ internal abstract class DatabaseServerBase {
     }
 
     public virtual async Task DropTableIndex(DatabaseTableIndex tableIndex, DatabaseServerOptions options) {
-        var script = $"DROP INDEX {GetQuotedTableIndexName(tableIndex, options)}";
+        var script = $"DROP INDEX {GetQuotedTableIndexName(tableIndex, true, options)}";
         await ExecuteScript(script, options);
     }
 

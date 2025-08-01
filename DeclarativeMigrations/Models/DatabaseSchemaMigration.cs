@@ -81,8 +81,8 @@ public class DatabaseSchemaMigration {
             };
         }
         
-        public static SchemaDifference CreateTableDifference(DifferenceType differenceType, DatabaseTable? databaseTable, DatabaseTable? targetTable) {
-            return new SchemaDifference(ObjectType.Table, differenceType, null) {
+        public static SchemaDifference CreateTableDifference(DifferenceType differenceType, PropertyType? propertyType, DatabaseTable? databaseTable, DatabaseTable? targetTable) {
+            return new SchemaDifference(ObjectType.Table, differenceType, propertyType) {
                 DatabaseTable = databaseTable,
                 TargetTable = targetTable
             };
@@ -142,8 +142,8 @@ public class DatabaseSchemaMigration {
         }
         else {
             // FIXME: re-enable this check once things are more stable
-            //if (Differences.Any())
-            //    throw new InvalidOperationException("Schema or application versions are the same, but there are differences in the actual schemas.");
+            if (Differences.Any())
+                throw new InvalidOperationException("Schema or application versions are the same, but there are differences in the actual schemas.");
 
             Type = MigrationType.SameVersion;
         }
@@ -188,7 +188,7 @@ public class DatabaseSchemaMigration {
 
         foreach (var targetTable in TargetSchema.GetOrderedTables()) {
             if (!DatabaseSchema.Tables.ContainsKey(targetTable.Name)) {
-                differences.Add(SchemaDifference.CreateTableDifference(SchemaDifference.DifferenceType.Added, null, targetTable));
+                differences.Add(SchemaDifference.CreateTableDifference(SchemaDifference.DifferenceType.Added, null, null, targetTable));
 
                 // also add all indexes
                 foreach (var index in targetTable.Indexes) {
@@ -199,7 +199,7 @@ public class DatabaseSchemaMigration {
 
         foreach (var databaseTable in DatabaseSchema.Tables) {
             if (!TargetSchema.Tables.ContainsKey(databaseTable.Key)) {
-                differences.Add(SchemaDifference.CreateTableDifference(SchemaDifference.DifferenceType.Dropped, databaseTable.Value, null));
+                differences.Add(SchemaDifference.CreateTableDifference(SchemaDifference.DifferenceType.Dropped, null, databaseTable.Value, null));
 
                 // also drop all indexes
                 foreach (var index in databaseTable.Value.Indexes) {
@@ -270,8 +270,11 @@ public class DatabaseSchemaMigration {
     private List<SchemaDifference> GetTableDifferences(DatabaseTable databaseTable, DatabaseTable targetTable) {
         var differences = new List<SchemaDifference>();
 
-        // if (databaseTable.Indices != targetTable.Indices)
-        //     ...
+        // check if the primary key columns have changed
+        var databasePrimaryKeyColumns = databaseTable.Columns.Values.Where(c => c.IsPrimaryKey).Select(c => c.Name).Order().ToList();
+        var targetPrimaryKeyColumns = targetTable.Columns.Values.Where(c => c.IsPrimaryKey).Select(c => c.Name).Order().ToList();
+        if (!databasePrimaryKeyColumns.SequenceEqual(targetPrimaryKeyColumns))
+            differences.Add(SchemaDifference.CreateTableDifference(SchemaDifference.DifferenceType.Altered, SchemaDifference.PropertyType.PrimaryKey, databaseTable, targetTable));
         
         return differences;
     }

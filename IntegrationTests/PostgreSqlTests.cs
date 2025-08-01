@@ -7,6 +7,8 @@ using Lundatech.DeclarativeMigrations.Models;
 
 using Npgsql;
 
+using NUnit.Framework;
+
 using Testcontainers.PostgreSql;
 
 namespace IntegrationTests;
@@ -55,8 +57,8 @@ public class Tests {
         }
     }
 
-    private async Task<DatabaseSchema> MigrateAndCheck() {
-        var databaseServer = await DatabaseServer.Create(DatabaseServerType.PostgreSql, _connectionString!);
+    private async Task<DatabaseSchema> MigrateAndCheck(Action<DatabaseServerOptions>? configure = null) {
+        var databaseServer = await DatabaseServer.Create(DatabaseServerType.PostgreSql, _connectionString!, configure);
         await databaseServer.MigrateSchemaTo(_requiredSchema!);
 
         return await ConsistencyAsserts();
@@ -93,6 +95,7 @@ public class Tests {
     [Test]
     [Order(2)]
     public async Task _02_AddNewTable() {
+        _requiredSchema!.IncrementVersion();
         _requiredSchema!.AddStandardTable("new_table")
             .WithColumn("id").AsGuid().AsPrimaryKey().DefaultingToRandomGuid()
             .WithColumn("name").AsString(100)
@@ -104,9 +107,10 @@ public class Tests {
     }
 
     [Test]
-    [Order(2)]
-    public async Task _02_AddTableIndex() {
-        _requiredSchema!.RebuildStandardTable("new_table")
+    [Order(3)]
+    public async Task _03_AddTableIndex() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
             .WithColumn("id").AsGuid().AsPrimaryKey().DefaultingToRandomGuid()
             .WithColumn("name").AsString(100)
             .WithIndex("id")
@@ -115,5 +119,278 @@ public class Tests {
         var databaseSchema = await MigrateAndCheck();
 
         Assert.That(databaseSchema.Tables.Count, Is.EqualTo(2));
+    }
+
+    [Test]
+    [Order(4)]
+    public async Task _04_AddTableColumn() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
+            .WithColumn("id").AsGuid().AsPrimaryKey().DefaultingToRandomGuid()
+            .WithColumn("name").AsString(100)
+            .WithColumn("is_manager").AsBoolean().DefaultingToValue(false)
+            .WithIndex("id")
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(2));
+    }
+
+    [Test]
+    [Order(5)]
+    public async Task _05_ModifyTableIndex() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
+            .WithColumn("id").AsGuid().AsPrimaryKey().DefaultingToRandomGuid()
+            .WithColumn("name").AsString(100)
+            .WithColumn("is_manager").AsBoolean().DefaultingToValue(false)
+            .WithIndex("id", "is_manager")
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(2));
+    }
+
+    [Test]
+    [Order(6)]
+    public async Task _06_ModifyStringTableColumnType() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
+            .WithColumn("id").AsGuid().AsPrimaryKey().DefaultingToRandomGuid()
+            .WithColumn("name").AsString(200)
+            .WithColumn("is_manager").AsBoolean().DefaultingToValue(false)
+            .WithIndex("id", "is_manager")
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(2));
+    }
+
+    [Test]
+    [Order(7)]
+    public async Task _07_AddIntegerTableColumn() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
+            .WithColumn("id").AsGuid().AsPrimaryKey().DefaultingToRandomGuid()
+            .WithColumn("name").AsString(200)
+            .WithColumn("is_manager").AsBoolean().DefaultingToValue(false)
+            .WithColumn("age").AsInteger32()
+            .WithIndex("id", "is_manager")
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(2));
+    }
+
+    [Test]
+    [Order(8)]
+    public async Task _08_ModifyIntegerTableColumnType() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
+            .WithColumn("id").AsGuid().AsPrimaryKey().DefaultingToRandomGuid()
+            .WithColumn("name").AsString(200)
+            .WithColumn("is_manager").AsBoolean().DefaultingToValue(false)
+            .WithColumn("age").AsInteger64()
+            .WithIndex("id", "is_manager")
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(2));
+    }
+
+    [Test]
+    [Order(9)]
+    public async Task _09_DropTableColumn() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
+            .WithColumn("id").AsGuid().AsPrimaryKey().DefaultingToRandomGuid()
+            .WithColumn("is_manager").AsBoolean().DefaultingToValue(false)
+            .WithColumn("age").AsInteger64()
+            .WithIndex("id", "is_manager")
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck(configure => {
+            configure.DropRemovedTableColumnsOnUpgrade = true;
+        });
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(2));
+    }
+
+    [Test]
+    [Order(10)]
+    public async Task _10_DropTable() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema.DropTable("standard_table");
+
+        var databaseSchema = await MigrateAndCheck(configure => {
+            configure.DropRemovedTablesOnUpgrade = true;
+        });
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    [Order(11)]
+    public async Task _11_ModifyTableColumnNullability() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
+            .WithColumn("id").AsGuid().AsPrimaryKey().DefaultingToRandomGuid()
+            .WithColumn("is_manager").AsBoolean().DefaultingToValue(false)
+            .WithColumn("age").AsInteger64().AsNullable()
+            .WithIndex("id", "is_manager")
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    [Order(12)]
+    public async Task _12_ModifyTableColumnNullabilityBack() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
+            .WithColumn("id").AsGuid().AsPrimaryKey().DefaultingToRandomGuid()
+            .WithColumn("is_manager").AsBoolean().DefaultingToValue(false)
+            .WithColumn("age").AsInteger64()
+            .WithIndex("id", "is_manager")
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    [Order(13)]
+    public async Task _13_ModifyTableColumnDefaultValue() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
+            .WithColumn("id").AsGuid().AsPrimaryKey().DefaultingToRandomGuid()
+            .WithColumn("is_manager").AsBoolean().DefaultingToValue(true)
+            .WithColumn("age").AsInteger64()
+            .WithIndex("id", "is_manager")
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    [Order(14)]
+    public async Task _14_ModifyTableColumnDropDefaultValue() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
+            .WithColumn("id").AsGuid().AsPrimaryKey().DefaultingToRandomGuid()
+            .WithColumn("is_manager").AsBoolean()
+            .WithColumn("age").AsInteger64()
+            .WithIndex("id", "is_manager")
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    [Order(15)]
+    public async Task _15_AddTablePrimaryKey() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
+            .WithColumn("id").AsGuid().AsPrimaryKey().DefaultingToRandomGuid()
+            .WithColumn("is_manager").AsBoolean().AsPrimaryKey()
+            .WithColumn("age").AsInteger64()
+            .WithIndex("id", "is_manager")
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    [Order(16)]
+    public async Task _16_DropTablePrimaryKeys() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
+            .WithColumn("id").AsGuid().DefaultingToRandomGuid()
+            .WithColumn("is_manager").AsBoolean()
+            .WithColumn("age").AsInteger64()
+            .WithIndex("id", "is_manager")
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    [Order(17)]
+    public async Task _17_AddTablePrimaryKeyWhenThereWasNone() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
+            .WithColumn("id").AsGuid().AsPrimaryKey().DefaultingToRandomGuid()
+            .WithColumn("is_manager").AsBoolean()
+            .WithColumn("age").AsInteger64()
+            .WithIndex("id", "is_manager")
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    [Order(18)]
+    public async Task _18_AddTableUniqueConstraint() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
+            .WithColumn("id").AsGuid().AsPrimaryKey().AsUnique().DefaultingToRandomGuid()
+            .WithColumn("is_manager").AsBoolean()
+            .WithColumn("age").AsInteger64()
+            .WithIndex("id", "is_manager")
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    [Order(19)]
+    public async Task _19_ModifyTableUniqueConstraint() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
+            .WithColumn("id").AsGuid().AsPrimaryKey().AsUnique().DefaultingToRandomGuid()
+            .WithColumn("is_manager").AsBoolean().AsUnique()
+            .WithColumn("age").AsInteger64()
+            .WithIndex("id", "is_manager")
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    [Order(20)]
+    public async Task _20_DropTableUniqueConstraint() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.ReplaceStandardTable("new_table")
+            .WithColumn("id").AsGuid().AsPrimaryKey().DefaultingToRandomGuid()
+            .WithColumn("is_manager").AsBoolean()
+            .WithColumn("age").AsInteger64()
+            .WithIndex("id", "is_manager")
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
     }
 }

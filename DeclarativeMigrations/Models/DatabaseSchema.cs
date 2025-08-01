@@ -41,6 +41,10 @@ public class DatabaseSchema {
         return new TableBuilder<TCustomTypes, TCustomTypeProvider>(this, tableName, customTypeProvider, _databaseServer);
     }
 
+    internal void DropTable(string tableName) {
+        _tables.TryRemove(tableName, out _);
+    }
+
     public TableBuilder<NullCustomTypes, NullCustomTypeProvider> AddStandardTable(string tableName) {
         return new TableBuilder<NullCustomTypes, NullCustomTypeProvider>(this, tableName, new NullCustomTypeProvider(), _databaseServer);
     }
@@ -48,6 +52,14 @@ public class DatabaseSchema {
     internal TableBuilder<NullCustomTypes, NullCustomTypeProvider> ReplaceStandardTable(string tableName) {
         _tables.TryRemove(tableName, out _);
         return new TableBuilder<NullCustomTypes, NullCustomTypeProvider>(this, tableName, new NullCustomTypeProvider(), _databaseServer);
+    }
+
+    internal void DropStandardTable(string tableName) {
+        _tables.TryRemove(tableName, out _);
+    }
+
+    internal void IncrementVersion() {
+        SchemaOrApplicationVersion = new Version(SchemaOrApplicationVersion.Major, SchemaOrApplicationVersion.Minor, SchemaOrApplicationVersion.Build + 1);
     }
 
     internal void AddTable(DatabaseTable table) {

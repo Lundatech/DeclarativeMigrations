@@ -3,6 +3,8 @@
 using Lundatech.DeclarativeMigrations.DatabaseServers;
 using Lundatech.DeclarativeMigrations.Models;
 
+using NUnit.Framework;
+
 namespace UnitTests;
 
 public class TableBuilderTests {

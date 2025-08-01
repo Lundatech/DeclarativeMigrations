@@ -35,7 +35,9 @@ internal partial class SqlServerDatabaseServer {
         return $"[{table.ParentSchema.Name}].[{table.Name}]";
     }
 
-    public override string GetQuotedTableIndexName(DatabaseTableIndex tableIndex, DatabaseServerOptions options) {
+    public override string GetQuotedTableIndexName(DatabaseTableIndex tableIndex, bool includeSchema, DatabaseServerOptions options) {
+        if (includeSchema)
+            return $"[{tableIndex.ParentTable.ParentSchema.Name}].[{tableIndex.Name}]";
         return $"[{tableIndex.Name}]";
     }
 }

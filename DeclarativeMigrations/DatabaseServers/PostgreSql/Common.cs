@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 
 using Lundatech.DeclarativeMigrations.Models;
 
@@ -35,7 +36,23 @@ internal partial class PostgreSqlDatabaseServer {
         return $"\"{tableColumn.Name}\"";
     }
 
-    public override string GetQuotedTableIndexName(DatabaseTableIndex tableIndex, DatabaseServerOptions options) {
+    private string GetPrimaryKeyConstraintName(DatabaseTable table) {
+        var targetPrimaryKeys = table.Columns.Values
+           .Where(x => x.IsPrimaryKey)
+           .Select(x => x.Name)
+           .Order()
+           .ToList();
+        var constraintName = $"ltdmpk_{table.Name}__{string.Join("__", targetPrimaryKeys)}";
+        if (constraintName.Length > 63) {
+            // PostgreSQL has a maximum identifier length of 63 characters
+            constraintName = constraintName.Substring(0, 63);
+        }
+        return constraintName;
+    }
+
+    public override string GetQuotedTableIndexName(DatabaseTableIndex tableIndex, bool includeSchema, DatabaseServerOptions options) {
+        if (includeSchema)
+            return $"\"{tableIndex.ParentTable.ParentSchema.Name}\".\"{tableIndex.Name}\"";
         return $"\"{tableIndex.Name}\"";
     }
 }

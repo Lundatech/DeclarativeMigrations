@@ -219,6 +219,10 @@ internal partial class PostgreSqlDatabaseServer {
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync()) {
             var indexName = (string)reader["index_name"];
+
+            // remove schema prefix if present
+            if (indexName.Contains('.')) indexName = indexName[(indexName.LastIndexOf('.') + 1)..];
+
             var tableName = (string)reader["table_name"];
             var columnName = (string)reader["column_name"];
 

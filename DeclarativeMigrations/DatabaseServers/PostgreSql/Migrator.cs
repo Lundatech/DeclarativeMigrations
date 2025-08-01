@@ -57,9 +57,10 @@ internal partial class PostgreSqlDatabaseServer {
             extraScripts.Add("NOT NULL");
         }
 
-        if (tableColumn.IsPrimaryKey) {
-            extraScripts.Add("PRIMARY KEY");
-        }
+        // this is handled as a table constraint elsewhere
+        //if (tableColumn.IsPrimaryKey) {
+        //    extraScripts.Add("PRIMARY KEY");
+        //}
 
         if (tableColumn.ForeignReference != null) {
             extraScripts.Add(
@@ -108,11 +109,68 @@ internal partial class PostgreSqlDatabaseServer {
     public override List<string> GetTableExtraCreateScripts(DatabaseTable table, DatabaseServerOptions options) {
         var extraScripts = new List<string>();
 
+        var primaryKeys = table.Columns.Values
+          .Where(x => x.IsPrimaryKey)
+          .Select(x => x.Name)
+          .Order()
+          .ToList();
+        if (primaryKeys.Count > 0)
+            extraScripts.Add($"CONSTRAINT {GetPrimaryKeyConstraintName(table)} PRIMARY KEY ({string.Join(", ", primaryKeys)})");
+
         var uniqueColumns = table.Columns.Values.Where(x => x.IsUnique).ToList();
-        if (uniqueColumns.Any())
+        if (uniqueColumns.Count > 0)
             extraScripts.Add($"UNIQUE ({string.Join(", ", uniqueColumns.Select(x => GetQuotedTableColumnName(x, options)))})");
 
         return extraScripts;
+    }
+
+    public override async Task AlterTableColumnType(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        var script = $"ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)} ALTER COLUMN {GetQuotedTableColumnName(difference.TargetTableColumn!, options)} TYPE {GetTableColumnDataTypeScript(difference.TargetTableColumn!, options)}";
+        await ExecuteScript(script, options);
+    }
+
+    public override async Task AlterTableColumnDefaultValue(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        var script = $"ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)} ALTER COLUMN {GetQuotedTableColumnName(difference.TargetTableColumn!, options)} {(difference.TargetTableColumn!.DefaultValue == null ? "DROP DEFAULT" : $"SET DEFAULT {GetDefaultValueScript(difference.TargetTableColumn!.DefaultValue)}")}";
+        await ExecuteScript(script, options);
+    }
+
+    public override async Task AlterTableColumnNullability(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        var script = $"ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)} ALTER COLUMN {GetQuotedTableColumnName(difference.TargetTableColumn!, options)} {(difference.TargetTableColumn!.IsNullable ? "DROP NOT NULL" : "SET NOT NULL")}";
+        await ExecuteScript(script, options);
+    }
+
+    public override Task AlterTableColumnPrimaryKey(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        // postgresql does not support altering the primary key on the column. instead we have to drop and recreate a table level constraint
+        // this is done elsewhere in the code so we do nothing here
+        return Task.CompletedTask;
+    }
+
+    public override async Task AlterTablePrimaryKey(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        //var databasePrimaryKeys = difference.DatabaseTable!.Columns.Values
+        //    .Where(x => x.IsPrimaryKey)
+        //    .Select(x => x.Name)
+        //    .Order()
+        //    .ToList();
+        if (difference.DatabaseTable!.Columns.Values.Any(x => x.IsPrimaryKey)) {
+            var script = $"""
+                ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)}
+                    DROP CONSTRAINT {GetPrimaryKeyConstraintName(difference.DatabaseTable!)};
+            """;
+            await ExecuteScript(script, options);
+        }
+
+        var targetPrimaryKeys = difference.TargetTable!.Columns.Values
+            .Where(x => x.IsPrimaryKey)
+            .Select(x => x.Name)
+            .Order()
+            .ToList();
+        if (targetPrimaryKeys.Count > 0) {
+            var script = $"""
+                ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)}
+                    ADD CONSTRAINT {GetPrimaryKeyConstraintName(difference.TargetTable!)} PRIMARY KEY ({string.Join(", ", targetPrimaryKeys)});
+                """;
+            await ExecuteScript(script, options);
+        }
     }
 
     public override async Task ExecuteScript(string script, DatabaseServerOptions options) {
