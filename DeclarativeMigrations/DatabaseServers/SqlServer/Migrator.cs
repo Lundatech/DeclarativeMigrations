@@ -29,7 +29,6 @@ internal partial class SqlServerDatabaseServer {
     }
     
     public override async Task ExecuteScript(string script, DatabaseServerOptions options) {
-        await EnsureConnectionIsOpen();
         await using var command = new SqlCommand(script, _connection, _transaction);
         await command.ExecuteNonQueryAsync();
 

@@ -2,11 +2,13 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 using Lundatech.DeclarativeMigrations.Builders;
 using Lundatech.DeclarativeMigrations.CustomTypes;
 using Lundatech.DeclarativeMigrations.DatabaseServers;
 
+[assembly: InternalsVisibleTo("IntegrationTests")]
 namespace Lundatech.DeclarativeMigrations.Models;
 
 public class DatabaseSchema {
@@ -31,24 +33,20 @@ public class DatabaseSchema {
     }
 
     public TableBuilder<TCustomTypes, TCustomTypeProvider> AddTable<TCustomTypes, TCustomTypeProvider>(string tableName, TCustomTypeProvider customTypeProvider) where TCustomTypes : Enum where TCustomTypeProvider : ICustomTypeProvider<TCustomTypes> {
-        //if (string.IsNullOrWhiteSpace(tableName))
-        //    throw new ArgumentException("Table name cannot be null or whitespace.", nameof(tableName));
-        //if (tableName.Trim() != tableName)
-        //    throw new ArgumentException("Table name cannot contain leading or trailing whitespace.", nameof(tableName));
-        //if (_tables.ContainsKey(tableName))
-        //    throw new ArgumentException($"Table with name '{tableName}' already exists in the schema.", nameof(tableName));
+        return new TableBuilder<TCustomTypes, TCustomTypeProvider>(this, tableName, customTypeProvider, _databaseServer);
+    }
 
+    internal TableBuilder<TCustomTypes, TCustomTypeProvider> ReplaceTable<TCustomTypes, TCustomTypeProvider>(string tableName, TCustomTypeProvider customTypeProvider) where TCustomTypes : Enum where TCustomTypeProvider : ICustomTypeProvider<TCustomTypes> {
+        _tables.TryRemove(tableName, out _);
         return new TableBuilder<TCustomTypes, TCustomTypeProvider>(this, tableName, customTypeProvider, _databaseServer);
     }
 
     public TableBuilder<NullCustomTypes, NullCustomTypeProvider> AddStandardTable(string tableName) {
-        //if (string.IsNullOrWhiteSpace(tableName))
-        //    throw new ArgumentException("Table name cannot be null or whitespace.", nameof(tableName));
-        //if (tableName.Trim() != tableName)
-        //    throw new ArgumentException("Table name cannot contain leading or trailing whitespace.", nameof(tableName));
-        //if (_tables.ContainsKey(tableName))
-        //    throw new ArgumentException($"Table with name '{tableName}' already exists in the schema.", nameof(tableName));
+        return new TableBuilder<NullCustomTypes, NullCustomTypeProvider>(this, tableName, new NullCustomTypeProvider(), _databaseServer);
+    }
 
+    internal TableBuilder<NullCustomTypes, NullCustomTypeProvider> ReplaceStandardTable(string tableName) {
+        _tables.TryRemove(tableName, out _);
         return new TableBuilder<NullCustomTypes, NullCustomTypeProvider>(this, tableName, new NullCustomTypeProvider(), _databaseServer);
     }
 

@@ -71,7 +71,7 @@ internal partial class PostgreSqlDatabaseServer {
         }
 
         if (tableColumn.Type.Type == DatabaseType.Standard.SerialInteger32 || tableColumn.Type.Type == DatabaseType.Standard.SerialInteger64) {
-            extraScripts.Add($"DEFAULT (nextval('{GetSequenceName(tableColumn)}'::REGCLASS))");
+            extraScripts.Add($"DEFAULT (nextval('{tableColumn.ParentTable.ParentSchema.Name}.{GetSequenceName(tableColumn)}'::REGCLASS))");
         }
 
         return extraScripts;
@@ -116,7 +116,6 @@ internal partial class PostgreSqlDatabaseServer {
     }
 
     public override async Task ExecuteScript(string script, DatabaseServerOptions options) {
-        await EnsureConnectionIsOpen();
         await using var command = new NpgsqlCommand(script, _connection, _transaction);
         await command.ExecuteNonQueryAsync();
     }

@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
 
-using Lundatech.DeclarativeMigrations.Models;
-
 using Npgsql;
 
 namespace Lundatech.DeclarativeMigrations.DatabaseServers.PostgreSql;

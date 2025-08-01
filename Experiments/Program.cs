@@ -35,10 +35,10 @@ internal class Program {
         };
         var connectionString = connectionStringBuilder.ToString();
 
-        var databaseServer = new DatabaseServer(DatabaseServerType.PostgreSql, connectionString);
+        var databaseServer = await DatabaseServer.Create(DatabaseServerType.PostgreSql, connectionString);
 
         // create target schema
-        var targetSchema = new DatabaseSchema("haip", new Version(1, 0, 1));
+        var targetSchema = new DatabaseSchema(DatabaseServerType.PostgreSql, "haip", new Version(1, 0, 1));
 
         targetSchema.AddTable<ApplicationDatabaseTypes, ApplicationDatabaseTypeProvider>("application_database_types", new ApplicationDatabaseTypeProvider())
             .WithColumn("customer_id").AsCustomType(ApplicationDatabaseTypes.CustomerId)
@@ -50,6 +50,6 @@ internal class Program {
             .WithColumn("name").AsBoolean()
             .Build();
 
-        await databaseServer.MigrateSchemaTo(targetSchema);
+        //await databaseServer.MigrateSchemaTo(targetSchema);
     }
 }

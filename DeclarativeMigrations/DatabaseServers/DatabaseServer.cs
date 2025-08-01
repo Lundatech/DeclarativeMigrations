@@ -16,7 +16,7 @@ public class DatabaseServer {
     private readonly DatabaseServerBase _databaseServer;
     private readonly DatabaseServerOptions _options = new();
    
-    public DatabaseServer(DatabaseServerType databaseServerType, string connectionString, Action<DatabaseServerOptions>? configure = null) {
+    private DatabaseServer(DatabaseServerType databaseServerType, string connectionString, Action<DatabaseServerOptions>? configure = null) {
         _databaseServer = databaseServerType switch {
             DatabaseServerType.SqlServer => new SqlServerDatabaseServer(new SqlConnection(connectionString), false, null),
             DatabaseServerType.PostgreSql => new PostgreSqlDatabaseServer(new NpgsqlConnection(connectionString), false, null),
@@ -26,7 +26,7 @@ public class DatabaseServer {
         if (configure != null) configure(_options);
     }
 
-    public DatabaseServer(DatabaseServerType databaseServerType, IDbConnection connection, IDbTransaction? transaction = null, Action<DatabaseServerOptions>? configure = null) {
+    private DatabaseServer(DatabaseServerType databaseServerType, IDbConnection connection, IDbTransaction? transaction = null, Action<DatabaseServerOptions>? configure = null) {
         _databaseServer = databaseServerType switch {
             DatabaseServerType.SqlServer => new SqlServerDatabaseServer((SqlConnection)connection, true, transaction != null ? (SqlTransaction)transaction : null),
             DatabaseServerType.PostgreSql => new PostgreSqlDatabaseServer((NpgsqlConnection)connection, true, transaction != null ? (NpgsqlTransaction)transaction : null),
@@ -34,6 +34,22 @@ public class DatabaseServer {
         };
 
         if (configure != null) configure(_options);
+    }
+
+    private async Task EnsureConnectionIsOpen() {
+        await _databaseServer.EnsureConnectionIsOpen();
+    }
+
+    public static async Task<DatabaseServer> Create(DatabaseServerType databaseServerType, string connectionString, Action<DatabaseServerOptions>? configure = null) {
+        var databaseServer = new DatabaseServer(databaseServerType, connectionString, configure);
+        await databaseServer.EnsureConnectionIsOpen();
+        return databaseServer;
+    }
+
+    public static async Task<DatabaseServer> Create(DatabaseServerType databaseServerType, IDbConnection connection, IDbTransaction? transaction = null, Action<DatabaseServerOptions>? configure = null) {
+        var databaseServer = new DatabaseServer(databaseServerType, connection, transaction, configure);
+        await databaseServer.EnsureConnectionIsOpen();
+        return databaseServer;
     }
 
     internal static DatabaseServerBase CreateSupportInstance(DatabaseServerType databaseServerType) {
