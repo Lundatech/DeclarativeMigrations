@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 using Lundatech.DeclarativeMigrations.Models;
@@ -49,7 +50,7 @@ internal partial class PostgreSqlDatabaseServer {
 
         await ReadSequences(schema, options);
         await ReadTables(schema, options);
-        await ReadIndices(schema, options);
+        await ReadIndexes(schema, options);
 
         return schema;
     }
@@ -135,7 +136,6 @@ internal partial class PostgreSqlDatabaseServer {
         DatabaseTable? currentTable = null;
 
         await using var reader = await command.ExecuteReaderAsync();
-
         while (await reader.ReadAsync()) {
             var tableName = (string)reader["table_name"];
             var columnName = (string)reader["column_name"];
@@ -188,75 +188,64 @@ internal partial class PostgreSqlDatabaseServer {
             currentTable.AddColumn(column);
         }
 
-        // add the table we we working on 
+        // add the table we were working on 
         if (currentTable != null) schema.AddTable(currentTable);
     }
-    
-    private async Task ReadIndices(DatabaseSchema schema, DatabaseServerOptions options) {
+
+    private async Task ReadIndexes(DatabaseSchema schema, DatabaseServerOptions options) {
         // read all indices from server
         var query = """
+            SELECT
+            	(i.indexrelid::regclass)::text AS index_name,
+            	c.relname AS table_name,
+            	a.attname AS column_name
+            FROM (SELECT UNNEST(indkey) AS indkey, indexrelid, indrelid, indisprimary, indisunique FROM pg_index) i
+            JOIN pg_class c
+            	ON c.oid = i.indrelid
+            JOIN pg_namespace ns
+            	ON ns.oid = c.relnamespace
+            JOIN pg_attribute a
+            	ON a.attrelid = c.oid AND a.attnum = i.indkey
+            WHERE ns.nspname = @schema_name AND i.indisprimary = false AND i.indisunique = false
+            ORDER BY index_name
             """;
         await using var command = new NpgsqlCommand(query, _connection, _transaction);
         command.Parameters.AddWithValue("schema_name", schema.Name);
 
-        DatabaseTable? currentTable = null;
+        string? currentIndexName = null;
+        string? currentTableName = null;
+        List<string>? currentIndexColumns = null;
 
         await using var reader = await command.ExecuteReaderAsync();
-
         while (await reader.ReadAsync()) {
+            var indexName = (string)reader["index_name"];
             var tableName = (string)reader["table_name"];
             var columnName = (string)reader["column_name"];
-            var columnDefault = reader["column_default"] as string;
-            var isNullable = (string)reader["is_nullable"] == "YES";
-            var dataType = (string)reader["data_type"];
-            var characterMaximumLength = reader["character_maximum_length"] as int?;
-            var numericPrecision = reader["numeric_precision"] as int?;
-            var isPrimaryKey = (bool)reader["is_primary_key"];
-            var isUnique = (bool)reader["is_unique"];
-            var foreignTableName = reader["foreign_table_name"] as string;
-            var foreignColumnName = reader["foreign_column_name"] as string;
-            var foreignDeleteRule = reader["foreign_delete_rule"] as string;
 
-            if (tableName.StartsWith($"_{options.MigrationTablesPrefix}_")) {
-                // skip migration tables
-                continue;
+            if (currentIndexName == null) {
+                currentIndexName = indexName;
+                currentTableName = tableName;
+                currentIndexColumns = [];
             }
-            
-            DatabaseType databaseType = GetDatabaseType(dataType, columnDefault, characterMaximumLength, numericPrecision);
+            else if (currentIndexName != indexName) {
+                var parentTable = schema.Tables[currentTableName!];
+                var index = new DatabaseTableIndex(parentTable, currentIndexName, currentIndexColumns!);
+                parentTable.AddIndex(index);
 
-            DatabaseTableColumnDefaultValue? defaultValue = null;
-            if (columnDefault != null) defaultValue = GetColumnDefault(columnDefault, databaseType);
-
-            DatabaseTableColumnForeignReference? foreignReference = null;
-
-            if (foreignDeleteRule != null) {
-                var onDeleteCascadeType = foreignDeleteRule switch {
-                    "RESTRICT" => CascadeType.Restrict,
-                    "CASCADE" => CascadeType.Cascade,
-                    "SET DEFAULT" => CascadeType.SetDefault,
-                    "SET NULL" => CascadeType.SetNull,
-                    "NO ACTION" => CascadeType.NoAction,
-                    _ => throw new NotImplementedException(foreignDeleteRule),
-                };
-                foreignReference = new DatabaseTableColumnForeignReference(foreignTableName!, foreignColumnName!, onDeleteCascadeType);
+                currentIndexName = indexName;
+                currentTableName = tableName;
+                currentIndexColumns = [];
             }
 
-            if (currentTable == null) {
-                currentTable = new DatabaseTable(schema, tableName);
-            }
-            else if (currentTable.Name != tableName) {
-                schema.AddTable(currentTable);
-                currentTable = new DatabaseTable(schema, tableName);
-            }
-
-            // add column
-            var column = new DatabaseTableColumn(currentTable, columnName, databaseType, isNullable,
-                isPrimaryKey, isUnique, defaultValue, foreignReference);
-            currentTable.AddColumn(column);
+            currentIndexColumns!.Add(columnName);
         }
 
-        // add the table we we working on 
-        if (currentTable != null) schema.AddTable(currentTable);
+        // add the index we were working on 
+        if (currentIndexName != null) {
+            var parentTable = schema.Tables[currentTableName!];
+            var index = new DatabaseTableIndex(parentTable, currentIndexName, currentIndexColumns!);
+            parentTable.AddIndex(index);
+        }
     }
 
     private string NormalizeDefaultString(string databaseString) {

@@ -11,7 +11,7 @@ public class DatabaseTable {
     private readonly ConcurrentDictionary<string, DatabaseTableDefaultConstraint> _defaultConstraints = [];
     private readonly ConcurrentDictionary<string, DatabaseTableNullabilityConstraint> _nullabilityConstraints = [];
     private readonly ConcurrentDictionary<string, DatabaseTablePrimaryKeyConstraint> _primaryKeyConstraints = [];
-    private readonly ConcurrentDictionary<string, DatabaseTableIndex> _indices = [];
+    private readonly ConcurrentDictionary<string, DatabaseTableIndex> _indexes = [];
 
     public DatabaseSchema ParentSchema { get; private set; }
     public string Name { get; private set; }
@@ -20,7 +20,7 @@ public class DatabaseTable {
     public IReadOnlyDictionary<string, DatabaseTableDefaultConstraint> DefaultConstraints => _defaultConstraints;
     public IReadOnlyDictionary<string, DatabaseTableNullabilityConstraint> NullabilityConstraints => _nullabilityConstraints;
     public IReadOnlyDictionary<string, DatabaseTablePrimaryKeyConstraint> PrimaryKeyConstraints => _primaryKeyConstraints;
-    public IReadOnlyDictionary<string, DatabaseTableIndex> Indices => _indices;
+    public IReadOnlyDictionary<string, DatabaseTableIndex> Indexes => _indexes;
 
     public DatabaseTable(DatabaseSchema parentSchema, string name) {
         if (string.IsNullOrWhiteSpace(name))
@@ -82,7 +82,7 @@ public class DatabaseTable {
             throw new ArgumentNullException(nameof(index), "Index cannot be null.");
         if (index.ParentTable != this)
             throw new ArgumentException("Index does not belong to this table.", nameof(index));
-        if (!_indices.TryAdd(index.Name, index))
+        if (!_indexes.TryAdd(index.Name, index))
             throw new ArgumentException($"Index with name '{index.Name}' already exists in the table.", nameof(index));
     }
 

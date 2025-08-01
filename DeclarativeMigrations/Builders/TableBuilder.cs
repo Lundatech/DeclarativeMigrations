@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 using Lundatech.DeclarativeMigrations.CustomTypes;
 using Lundatech.DeclarativeMigrations.DatabaseServers;
@@ -23,7 +24,7 @@ public class TableBuilder<TCustomTypes, TCustomTypeProvider> where TCustomTypes 
     }
 
     public TableIndexBuilder<TCustomTypes, TCustomTypeProvider> WithIndex(params string[] columnNames) {
-        var indexBuilder = new TableIndexBuilder<TCustomTypes, TCustomTypeProvider>(this, _table, _customTypeProvider, _databaseServer, columnNames);
+        var indexBuilder = new TableIndexBuilder<TCustomTypes, TCustomTypeProvider>(this, _table, _databaseServer, columnNames.ToList());
         _indexBuilders.Add(indexBuilder);
         return indexBuilder;
     }

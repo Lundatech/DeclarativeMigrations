@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -8,69 +9,114 @@ namespace Lundatech.DeclarativeMigrations.DatabaseServers;
 
 internal abstract class DatabaseServerBase {
     public abstract Task EnsureConnectionIsOpen();
-    
+
     public abstract Task<DatabaseSchema> ReadSchema(string schemaName, DatabaseServerOptions options);
 
     public async Task ApplySchemaMigration(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
         // create schema if missing
         await CreateSchemaIfMissing(schemaMigration.DatabaseSchema, options);
-        
+
         // create missing sequences
         await CreateMissingSequences(schemaMigration, options);
-        
+
         // create missing tables
         await CreateMissingTables(schemaMigration, options);
-        
+
         // create missing table columns
         await CreateMissingTableColumns(schemaMigration, options);
-        
+
         // handle altered table columns
         await AlterTableColumns(schemaMigration, options);
-        
+
         // optionally drop redundant table columns
         await DropRedundantTableColumns(schemaMigration, options);
-        
+
         // optionally drop redundant tables
         await DropRedundantTables(schemaMigration, options);
-        
+
         // optionally drop redundant sequences
         await DropRedundantSequences(schemaMigration, options);
-        
+
+        // drop redundant table indexes before creating to minimize resource usage on the database server
+        await DropRedundantTableIndexes(schemaMigration, options);
+
+        // create missing table indexes
+        await CreateMissingTableIndexes(schemaMigration, options);
+
+        // handle altered table indexes
+        await AlterTableIndexes(schemaMigration, options);
+
         // update schema version in database
-        await UpdateSchemaVersion(schemaMigration.TargetSchema, options);;
+        await UpdateSchemaVersion(schemaMigration.TargetSchema, options);
+
+        var unhandledDifferences = schemaMigration.Differences.Where(x => !x.IsHandled).ToList();
+        if (unhandledDifferences.Count > 0) throw new InvalidOperationException("Not all schema differences were handled during migration.");
     }
 
     public abstract Task UpdateSchemaVersion(DatabaseSchema schemaMigration, DatabaseServerOptions options);
-    
-    public virtual async Task CreateMissingSequences(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
+
+    public async Task CreateMissingSequences(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
         var sequencesToCreate = schemaMigration.Differences
             .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.Sequence && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Added).ToList();
         foreach (var difference in sequencesToCreate) {
             await CreateSequence(difference, options);
+            difference.SetHandled();
         }
     }
-    
-    public virtual async Task CreateMissingTables(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
+
+    public async Task CreateMissingTables(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
         var tablesToCreate = schemaMigration.Differences
             .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.Table && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Added).ToList();
         foreach (var difference in tablesToCreate) {
             await CreateTable(difference, options);
+            difference.SetHandled();
         }
     }
-    
-    public virtual async Task CreateMissingTableColumns(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
+
+    public async Task CreateMissingTableColumns(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
         var tableColumnsToCreate = schemaMigration.Differences
             .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.TableColumn && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Added).ToList();
         foreach (var difference in tableColumnsToCreate) {
             await CreateTableColumn(difference, options);
+            difference.SetHandled();
         }
     }
-    
-    public virtual async Task AlterTableColumns(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
+
+    public async Task AlterTableColumns(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
         var tableColumnsToAlter = schemaMigration.Differences
             .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.TableColumn && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Altered).ToList();
         foreach (var difference in tableColumnsToAlter) {
             await AlterTableColumn(difference, options);
+            difference.SetHandled();
+        }
+    }
+
+    public async Task CreateMissingTableIndexes(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
+        var indexesToCreate = schemaMigration.Differences
+            .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.TableIndex && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Added).ToList();
+        foreach (var difference in indexesToCreate) {
+            await CreateTableIndex(difference.TargetTableIndex!, options);
+            difference.SetHandled();
+        }
+    }
+
+    public async Task DropRedundantTableIndexes(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
+        var indexesToDrop = schemaMigration.Differences
+            .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.TableIndex && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Dropped).ToList();
+        foreach (var difference in indexesToDrop) {
+            await DropTableIndex(difference.DatabaseTableIndex!, options);
+            difference.SetHandled();
+        }
+    }
+
+    public async Task AlterTableIndexes(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
+        var indexesToAlter = schemaMigration.Differences
+            .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.TableIndex && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Altered).ToList();
+        foreach (var difference in indexesToAlter) {
+            // handle this by dropping and recreating the index
+            await DropTableIndex(difference.DatabaseTableIndex!, options);
+            await CreateTableIndex(difference.TargetTableIndex!, options);
+            difference.SetHandled();
         }
     }
 
@@ -78,70 +124,80 @@ internal abstract class DatabaseServerBase {
         var script = $"ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)} ALTER COLUMN {GetTableColumnCreateScript(difference.DatabaseTableColumn!, options)}";
         await ExecuteScript(script, options);
     }
-    
-    public virtual async Task DropRedundantTableColumns(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
+
+    public async Task DropRedundantTableColumns(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
         var tableColumnsToDrop = schemaMigration.Differences
             .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.TableColumn && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Dropped).ToList();
         // never drop table columns when downgrading
-        if (schemaMigration.Type == DatabaseSchemaMigration.MigrationType.Upgrade && options.DropRemovedTableColumnsOnUpgrade) {
-            foreach (var difference in tableColumnsToDrop) {
+        foreach (var difference in tableColumnsToDrop) {
+            if (schemaMigration.Type == DatabaseSchemaMigration.MigrationType.Upgrade && options.DropRemovedTableColumnsOnUpgrade) {
                 await DropTableColumn(difference, options);
             }
+            difference.SetHandled();
         }
     }
-    
-    public virtual async Task DropRedundantTables(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
+
+    public async Task DropRedundantTables(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
         var tablesToDrop = schemaMigration.Differences
             .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.Table && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Dropped).ToList();
         // never drop tables when downgrading
-        if (schemaMigration.Type == DatabaseSchemaMigration.MigrationType.Upgrade && options.DropRemovedTablesOnUpgrade) {
-            foreach (var difference in tablesToDrop) {
+        foreach (var difference in tablesToDrop) {
+            if (schemaMigration.Type == DatabaseSchemaMigration.MigrationType.Upgrade && options.DropRemovedTablesOnUpgrade) {
                 await DropTable(difference, options);
             }
+            difference.SetHandled();
         }
     }
-    
-    public virtual async Task DropRedundantSequences(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
+
+    public async Task DropRedundantSequences(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
         var sequencesToDrop = schemaMigration.Differences
             .Where(x => x.Object == DatabaseSchemaMigration.SchemaDifference.ObjectType.Sequence && x.Type == DatabaseSchemaMigration.SchemaDifference.DifferenceType.Dropped).ToList();
         // never drop sequences when downgrading
-        if (schemaMigration.Type == DatabaseSchemaMigration.MigrationType.Upgrade && options.DropRemovedSequencesOnUpgrade) {
-            foreach (var difference in sequencesToDrop) {
+        foreach (var difference in sequencesToDrop) {
+            if (schemaMigration.Type == DatabaseSchemaMigration.MigrationType.Upgrade && options.DropRemovedSequencesOnUpgrade) {
                 await DropSequence(difference, options);
             }
+            difference.SetHandled();
         }
     }
-    
+
     public abstract Task CreateSchemaIfMissing(DatabaseSchema schema, DatabaseServerOptions options);
-    
+
     public virtual async Task CreateSequence(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
         var script = $"CREATE SEQUENCE {GetQuotedSequenceName(difference.TargetSequence!, options)}";
         await ExecuteScript(script, options);
     }
 
     public abstract string GetQuotedSequenceName(DatabaseSequence sequence, DatabaseServerOptions options);
-    
+
     public virtual async Task DropSequence(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
         var script = $"DROP SEQUENCE {GetQuotedSequenceName(difference.DatabaseSequence!, options)}";
         await ExecuteScript(script, options);
     }
-    
+
     public virtual async Task CreateTable(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
         var script = $"CREATE TABLE {GetQuotedTableName(difference.TargetTable!, options)} ({string.Join(", ", difference.TargetTable!.Columns.Values.Select(x => GetTableColumnCreateScript(x, options)))}{GetTableExtraCreateScript(difference.TargetTable!, options)})";
         await ExecuteScript(script, options);
     }
 
+    public virtual async Task CreateTableIndex(DatabaseTableIndex tableIndex, DatabaseServerOptions options) {
+        var script = $"CREATE INDEX {GetQuotedTableIndexName(tableIndex, options)} ON {GetQuotedTableName(tableIndex.ParentTable, options)} ({string.Join(", ", tableIndex.ColumnNames.Select(x => GetQuotedTableColumnName(tableIndex.ParentTable.Columns[x], options)))})";
+        await ExecuteScript(script, options);
+    }
+
+    public abstract string GetQuotedTableIndexName(DatabaseTableIndex tableIndex, DatabaseServerOptions options);
+
     public virtual async Task CreateTableColumn(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
         var script = $"ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)} ADD COLUMN {GetTableColumnCreateScript(difference.DatabaseTableColumn!, options)}";
         await ExecuteScript(script, options);
     }
-    
+
     public virtual string GetTableColumnCreateScript(DatabaseTableColumn tableColumn, DatabaseServerOptions options) {
         return $"{GetQuotedTableColumnName(tableColumn, options)} {GetTableColumnDataTypeScript(tableColumn, options)}{GetTableColumnExtraCreateScript(tableColumn, options)}";
     }
 
     public abstract string GetQuotedTableColumnName(DatabaseTableColumn tableColumn, DatabaseServerOptions options);
-    
+
     public abstract string GetTableColumnDataTypeScript(DatabaseTableColumn tableColumn, DatabaseServerOptions options);
 
     public virtual string GetTableColumnExtraCreateScript(DatabaseTableColumn tableColumn, DatabaseServerOptions options) {
@@ -149,7 +205,7 @@ internal abstract class DatabaseServerBase {
         if (!extraScripts.Any()) return string.Empty;
         return $" {string.Join(" ", extraScripts)}";
     }
-    
+
     public abstract List<string> GetTableColumnExtraCreateScripts(DatabaseTableColumn tableColumn, DatabaseServerOptions options);
 
     public virtual string GetTableExtraCreateScript(DatabaseTable table, DatabaseServerOptions options) {
@@ -157,25 +213,35 @@ internal abstract class DatabaseServerBase {
         if (!extraScripts.Any()) return string.Empty;
         return $", {string.Join(", ", extraScripts)}";
     }
-    
+
     public abstract List<string> GetTableExtraCreateScripts(DatabaseTable table, DatabaseServerOptions options);
-    
+
     public virtual async Task DropTable(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
         var script = $"DROP TABLE {GetQuotedTableName(difference.DatabaseTable!, options)}";
         await ExecuteScript(script, options);
     }
-    
+
+    public virtual async Task DropTableIndex(DatabaseTableIndex tableIndex, DatabaseServerOptions options) {
+        var script = $"DROP INDEX {GetQuotedTableIndexName(tableIndex, options)}";
+        await ExecuteScript(script, options);
+    }
+
     public virtual async Task DropTableColumn(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
         var script = $"ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)} DROP COLUMN {GetQuotedTableColumnName(difference.DatabaseTableColumn!, options)}";
         await ExecuteScript(script, options);
     }
-    
+
     public abstract string GetQuotedTableName(DatabaseTable table, DatabaseServerOptions options);
+    public abstract string GetSequenceName(DatabaseTableColumn tableColumn);
+    public abstract string GetIndexName(DatabaseTable table, List<string> columnNames);
     public abstract Task ExecuteScript(string script, DatabaseServerOptions options);
 
     public virtual void TableBuilderHook(DatabaseTable table) {
     }
-    
+
     public virtual void TableColumnBuilderHook(DatabaseTableColumn tableColumn) {
+    }
+
+    public virtual void TableIndexBuilderHook(DatabaseTableIndex tableIndex) {
     }
 }
