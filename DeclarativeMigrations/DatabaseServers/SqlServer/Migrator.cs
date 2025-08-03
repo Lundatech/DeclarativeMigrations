@@ -41,7 +41,15 @@ internal partial class SqlServerDatabaseServer {
         throw new NotImplementedException();
     }
 
+    public override Task AlterTableColumnUnique(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        throw new NotImplementedException();
+    }
+
     public override Task AlterTableColumnPrimaryKey(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        throw new NotImplementedException();
+    }
+    
+    public override Task AlterTableUnique(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
         throw new NotImplementedException();
     }
 
@@ -52,6 +60,5 @@ internal partial class SqlServerDatabaseServer {
     public override async Task ExecuteScript(string script, DatabaseServerOptions options) {
         await using var command = new SqlCommand(script, _connection, _transaction);
         await command.ExecuteNonQueryAsync();
-
     }
 }

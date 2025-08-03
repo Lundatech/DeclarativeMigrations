@@ -12,7 +12,7 @@ internal partial class PostgreSqlDatabaseServer {
     private (string TableName, string FullTableName) GetMigrationTableName(DatabaseServerOptions options, string schemaName, string tableName) {
         if (string.IsNullOrWhiteSpace(tableName))
             throw new ArgumentException("Table name cannot be null or whitespace.", nameof(tableName));
-        return ($"_{options.MigrationTablesPrefix}_{tableName}", $"\"{schemaName}\".\"_{options.MigrationTablesPrefix}_{tableName}\"");
+        return ($"_{options.MigrationDatabasePrefix}_{tableName}", $"\"{schemaName}\".\"_{options.MigrationDatabasePrefix}_{tableName}\"");
     }
 
     private async Task<bool> SchemaExists(string schemaName) {
@@ -150,7 +150,7 @@ internal partial class PostgreSqlDatabaseServer {
             var foreignColumnName = reader["foreign_column_name"] as string;
             var foreignDeleteRule = reader["foreign_delete_rule"] as string;
 
-            if (tableName.StartsWith($"_{options.MigrationTablesPrefix}_")) {
+            if (tableName.StartsWith($"_{options.MigrationDatabasePrefix}_")) {
                 // skip migration tables
                 continue;
             }

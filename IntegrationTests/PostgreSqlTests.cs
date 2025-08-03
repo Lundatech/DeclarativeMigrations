@@ -393,4 +393,49 @@ public class Tests {
 
         Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
     }
+    
+    [Test]
+    [Order(21)]
+    public async Task _21_AddNewTableWithForeignReference() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.AddStandardTable("new_table2")
+            .WithColumn("id").AsSerialInteger32().AsPrimaryKey()
+            .WithColumn("name").AsString(200)
+            .WithColumn("external_id").AsGuid().HavingReferenceTo("new_table", "id", CascadeType.Cascade)
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
+    }
+    [Test]
+    [Order(22)]
+    public async Task _22_DropForeignReference() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.AddStandardTable("new_table2")
+            .WithColumn("id").AsSerialInteger32().AsPrimaryKey()
+            .WithColumn("name").AsString(200)
+            .WithColumn("external_id").AsGuid()
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    [Order(23)]
+    public async Task _23_AddForeignReference() {
+        _requiredSchema!.IncrementVersion();
+        _requiredSchema!.AddStandardTable("new_table2")
+            .WithColumn("id").AsSerialInteger32().AsPrimaryKey()
+            .WithColumn("name").AsString(200)
+            .WithColumn("external_id").AsGuid().HavingReferenceTo("new_table", "id", CascadeType.Cascade)
+            .Build();
+
+        var databaseSchema = await MigrateAndCheck();
+
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
+    }
+
 }

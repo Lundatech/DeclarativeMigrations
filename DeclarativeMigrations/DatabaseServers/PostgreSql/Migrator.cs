@@ -62,10 +62,11 @@ internal partial class PostgreSqlDatabaseServer {
         //    extraScripts.Add("PRIMARY KEY");
         //}
 
-        if (tableColumn.ForeignReference != null) {
-            extraScripts.Add(
-                $"REFERENCES \"{tableColumn.ParentTable.ParentSchema.Name}\".\"{tableColumn.ForeignReference.ForeignTableName}\" (\"{tableColumn.ForeignReference.ForeignColumnName}\") ON DELETE {GetCascadeTypeScript(tableColumn.ForeignReference.OnDeleteCascadeType)}");
-        }
+        // this is handled as a table constraint elsewhere
+        //if (tableColumn.ForeignReference != null) {
+        //    extraScripts.Add(
+        //        $"REFERENCES \"{tableColumn.ParentTable.ParentSchema.Name}\".\"{tableColumn.ForeignReference.ForeignTableName}\" (\"{tableColumn.ForeignReference.ForeignColumnName}\") ON DELETE {GetCascadeTypeScript(tableColumn.ForeignReference.OnDeleteCascadeType)}");
+        //}
 
         if (tableColumn.DefaultValue != null) {
             extraScripts.Add($"DEFAULT {GetDefaultValueScript(tableColumn.DefaultValue)}");
@@ -117,10 +118,27 @@ internal partial class PostgreSqlDatabaseServer {
         if (primaryKeys.Count > 0)
             extraScripts.Add($"CONSTRAINT {GetPrimaryKeyConstraintName(table)} PRIMARY KEY ({string.Join(", ", primaryKeys)})");
 
-        var uniqueColumns = table.Columns.Values.Where(x => x.IsUnique).ToList();
+        var uniqueColumns = table.Columns.Values
+            .Where(x => x.IsUnique)
+            .Select(x => x.Name)
+            .Order()
+            .ToList();
         if (uniqueColumns.Count > 0)
-            extraScripts.Add($"UNIQUE ({string.Join(", ", uniqueColumns.Select(x => GetQuotedTableColumnName(x, options)))})");
+            extraScripts.Add($"CONSTRAINT {GetUniqueConstraintName(table)} UNIQUE ({string.Join(", ", uniqueColumns)})");
 
+        var foreignReferenceColumns = table.Columns.Values
+            .Where(x => x.ForeignReference != null)
+            .ToList();
+        extraScripts.AddRange(foreignReferenceColumns.Select(c=> {
+            return $"""
+                CONSTRAINT {GetForeignKeyConstraintName(c)}
+                   FOREIGN KEY (\"{c.Name}\")
+                   REFERENCES {GetQuotedTableName(table.ParentSchema.Tables[c.ForeignReference!.ForeignTableName], options)}
+                   (\"{c.ForeignReference!.ForeignColumnName}\")
+                   ON DELETE {GetCascadeTypeScript(c.ForeignReference!.OnDeleteCascadeType)}
+                """;
+        }));
+        
         return extraScripts;
     }
 
@@ -139,6 +157,16 @@ internal partial class PostgreSqlDatabaseServer {
         await ExecuteScript(script, options);
     }
 
+    public override Task AlterTableColumnForeignReference(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        fixme
+    }
+
+    public override Task AlterTableColumnUnique(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        // postgresql does not support altering the unique constraint on the column. instead we have to drop and recreate a table level constraint
+        // this is done elsewhere in the code so we do nothing here
+        return Task.CompletedTask;
+    }
+
     public override Task AlterTableColumnPrimaryKey(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
         // postgresql does not support altering the primary key on the column. instead we have to drop and recreate a table level constraint
         // this is done elsewhere in the code so we do nothing here
@@ -155,7 +183,7 @@ internal partial class PostgreSqlDatabaseServer {
             var script = $"""
                 ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)}
                     DROP CONSTRAINT {GetPrimaryKeyConstraintName(difference.DatabaseTable!)};
-            """;
+                """;
             await ExecuteScript(script, options);
         }
 
@@ -168,6 +196,30 @@ internal partial class PostgreSqlDatabaseServer {
             var script = $"""
                 ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)}
                     ADD CONSTRAINT {GetPrimaryKeyConstraintName(difference.TargetTable!)} PRIMARY KEY ({string.Join(", ", targetPrimaryKeys)});
+                """;
+            await ExecuteScript(script, options);
+        }
+    }
+
+    public override async Task AlterTableUnique(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        if (difference.DatabaseTable!.Columns.Values.Any(x => x.IsUnique)) {
+            var script = $"""
+                ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)}
+                    DROP CONSTRAINT {GetUniqueConstraintName(difference.DatabaseTable!)};
+                """;
+            await ExecuteScript(script, options);
+        }
+        
+        var targetUniqueColumns = difference.TargetTable!.Columns.Values
+            .Where(x => x.IsUnique)
+            .Select(x => x.Name)
+            .Order()
+            .ToList();
+
+        if (targetUniqueColumns.Count > 0) {
+            var script = $"""
+                ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)}
+                    ADD CONSTRAINT {GetUniqueConstraintName(difference.TargetTable!)} UNIQUE ({string.Join(", ", targetUniqueColumns)});
                 """;
             await ExecuteScript(script, options);
         }

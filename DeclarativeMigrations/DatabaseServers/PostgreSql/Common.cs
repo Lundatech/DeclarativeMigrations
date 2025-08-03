@@ -49,6 +49,29 @@ internal partial class PostgreSqlDatabaseServer {
         }
         return constraintName;
     }
+    
+    private string GetUniqueConstraintName(DatabaseTable table) {
+        var uniqueColumnNames = table.Columns.Values
+            .Where(x => x.IsUnique)
+            .Select(x => x.Name)
+            .Order()
+            .ToList();
+        var constraintName = $"ltdmunq_{table.Name}__{string.Join("__", uniqueColumnNames)}";
+        if (constraintName.Length > 63) {
+            // PostgreSQL has a maximum identifier length of 63 characters
+            constraintName = constraintName.Substring(0, 63);
+        }
+        return constraintName;
+    }
+    
+    private string GetForeignKeyConstraintName(DatabaseTableColumn tableColumn) {
+        var constraintName = $"ltdmfk_{tableColumn.ParentTable.Name}__{tableColumn.Name}";
+        if (constraintName.Length > 63) {
+            // PostgreSQL has a maximum identifier length of 63 characters
+            constraintName = constraintName.Substring(0, 63);
+        }
+        return constraintName;
+    }
 
     public override string GetQuotedTableIndexName(DatabaseTableIndex tableIndex, bool includeSchema, DatabaseServerOptions options) {
         if (includeSchema)

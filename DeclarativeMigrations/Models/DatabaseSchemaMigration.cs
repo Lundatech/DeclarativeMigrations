@@ -17,7 +17,7 @@ public class DatabaseSchemaMigration {
         Downgrade,
         SameVersion
     }
-    
+
     public MigrationType Type { get; }
 
     public class SchemaDifference {
@@ -52,10 +52,10 @@ public class DatabaseSchemaMigration {
 
         public DatabaseSequence? DatabaseSequence { get; private set; }
         public DatabaseSequence? TargetSequence { get; private set; }
-        
+
         public DatabaseTable? DatabaseTable { get; private set; }
         public DatabaseTable? TargetTable { get; private set; }
-        
+
         public DatabaseTableColumn? DatabaseTableColumn { get; private set; }
         public DatabaseTableColumn? TargetTableColumn { get; private set; }
 
@@ -74,21 +74,24 @@ public class DatabaseSchemaMigration {
             Property = propertyType;
         }
 
-        public static SchemaDifference CreateSequenceDifference(DifferenceType differenceType, DatabaseSequence? databaseSequence, DatabaseSequence? targetSequence) {
+        public static SchemaDifference CreateSequenceDifference(DifferenceType differenceType, DatabaseSequence? databaseSequence,
+            DatabaseSequence? targetSequence) {
             return new SchemaDifference(ObjectType.Sequence, differenceType, null) {
                 DatabaseSequence = databaseSequence,
                 TargetSequence = targetSequence
             };
         }
-        
-        public static SchemaDifference CreateTableDifference(DifferenceType differenceType, PropertyType? propertyType, DatabaseTable? databaseTable, DatabaseTable? targetTable) {
+
+        public static SchemaDifference CreateTableDifference(DifferenceType differenceType, PropertyType? propertyType, DatabaseTable? databaseTable,
+            DatabaseTable? targetTable) {
             return new SchemaDifference(ObjectType.Table, differenceType, propertyType) {
                 DatabaseTable = databaseTable,
                 TargetTable = targetTable
             };
         }
 
-        public static SchemaDifference CreateTableIndexDifference(DifferenceType differenceType, DatabaseTable? databaseTable, DatabaseTableIndex? databaseTableIndex, DatabaseTable? targetTable, DatabaseTableIndex? targetTableIndex) {
+        public static SchemaDifference CreateTableIndexDifference(DifferenceType differenceType, DatabaseTable? databaseTable,
+            DatabaseTableIndex? databaseTableIndex, DatabaseTable? targetTable, DatabaseTableIndex? targetTableIndex) {
             return new SchemaDifference(ObjectType.TableIndex, differenceType, null) {
                 DatabaseTable = databaseTable,
                 TargetTable = targetTable,
@@ -97,7 +100,8 @@ public class DatabaseSchemaMigration {
             };
         }
 
-        public static SchemaDifference CreateTableColumnDifference(DifferenceType differenceType, DatabaseTable databaseTable, DatabaseTableColumn? databaseTableColumn, DatabaseTable targetTable, DatabaseTableColumn? targetTableColumn) {
+        public static SchemaDifference CreateTableColumnDifference(DifferenceType differenceType, DatabaseTable databaseTable,
+            DatabaseTableColumn? databaseTableColumn, DatabaseTable targetTable, DatabaseTableColumn? targetTableColumn) {
             return new SchemaDifference(ObjectType.TableColumn, differenceType, null) {
                 DatabaseTable = databaseTable,
                 TargetTable = targetTable,
@@ -106,7 +110,8 @@ public class DatabaseSchemaMigration {
             };
         }
 
-        public static SchemaDifference CreateColumnDifference(PropertyType propertyType, DatabaseTable databaseTable, DatabaseTableColumn databaseTableColumn, DatabaseTable targetTable, DatabaseTableColumn targetTableColumn) {
+        public static SchemaDifference CreateColumnDifference(PropertyType propertyType, DatabaseTable databaseTable, DatabaseTableColumn databaseTableColumn,
+            DatabaseTable targetTable, DatabaseTableColumn targetTableColumn) {
             return new SchemaDifference(ObjectType.TableColumn, DifferenceType.Altered, propertyType) {
                 DatabaseTable = databaseTable,
                 TargetTable = targetTable,
@@ -115,7 +120,8 @@ public class DatabaseSchemaMigration {
             };
         }
 
-        public static SchemaDifference CreateIndexDifference(PropertyType propertyType, DatabaseTable databaseTable, DatabaseTableIndex databaseTableIndex, DatabaseTable targetTable, DatabaseTableIndex targetTableIndex) {
+        public static SchemaDifference CreateIndexDifference(PropertyType propertyType, DatabaseTable databaseTable, DatabaseTableIndex databaseTableIndex,
+            DatabaseTable targetTable, DatabaseTableIndex targetTableIndex) {
             return new SchemaDifference(ObjectType.TableIndex, DifferenceType.Altered, propertyType) {
                 DatabaseTable = databaseTable,
                 TargetTable = targetTable,
@@ -134,6 +140,7 @@ public class DatabaseSchemaMigration {
         TargetSchema = targetSchema;
 
         Differences = GetDifferences().ToImmutableList();
+
         if (targetSchema.SchemaOrApplicationVersion > databaseSchema.SchemaOrApplicationVersion) {
             Type = MigrationType.Upgrade;
         }
@@ -142,10 +149,14 @@ public class DatabaseSchemaMigration {
         }
         else {
             // FIXME: re-enable this check once things are more stable
-            if (Differences.Any())
-                throw new InvalidOperationException("Schema or application versions are the same, but there are differences in the actual schemas.");
-
-            Type = MigrationType.SameVersion;
+            if (Differences.Any()) {
+                if (options.SameVersionDifferencesHandling == DatabaseServerOptions.SameVersionDifferencesHandlingType.Error)
+                    throw new InvalidOperationException("Schema or application versions are the same, but there are differences in the actual schemas.");
+                else if (options.SameVersionDifferencesHandling == DatabaseServerOptions.SameVersionDifferencesHandlingType.TreatAsUpgrade)
+                    Type = MigrationType.Upgrade; // or Downgrade, depending on the context
+            }
+            else
+                Type = MigrationType.SameVersion;
         }
     }
 
@@ -171,18 +182,18 @@ public class DatabaseSchemaMigration {
                 differences.Add(SchemaDifference.CreateSequenceDifference(SchemaDifference.DifferenceType.Added, null, targetSequence.Value));
             }
         }
-        
+
         foreach (var databaseSequence in DatabaseSchema.Sequences) {
             if (!TargetSchema.Sequences.ContainsKey(databaseSequence.Key)) {
                 differences.Add(SchemaDifference.CreateSequenceDifference(SchemaDifference.DifferenceType.Dropped, databaseSequence.Value, null));
             }
         }
-        
+
         // no altered needed
-        
+
         return differences;
     }
-    
+
     private List<SchemaDifference> GetTableDifferences() {
         var differences = new List<SchemaDifference>();
 
@@ -203,7 +214,8 @@ public class DatabaseSchemaMigration {
 
                 // also drop all indexes
                 foreach (var index in databaseTable.Value.Indexes) {
-                    differences.Add(SchemaDifference.CreateTableIndexDifference(SchemaDifference.DifferenceType.Dropped, databaseTable.Value, index.Value, null, null));
+                    differences.Add(SchemaDifference.CreateTableIndexDifference(SchemaDifference.DifferenceType.Dropped, databaseTable.Value, index.Value, null,
+                        null));
                 }
             }
         }
@@ -224,13 +236,15 @@ public class DatabaseSchemaMigration {
 
         foreach (var targetColumn in targetTable.Columns) {
             if (!databaseTable.Columns.ContainsKey(targetColumn.Key)) {
-                differences.Add(SchemaDifference.CreateTableColumnDifference(SchemaDifference.DifferenceType.Added, databaseTable, null, targetTable, targetColumn.Value));
+                differences.Add(SchemaDifference.CreateTableColumnDifference(SchemaDifference.DifferenceType.Added, databaseTable, null, targetTable,
+                    targetColumn.Value));
             }
         }
 
         foreach (var databaseColumn in databaseTable.Columns) {
             if (!targetTable.Columns.ContainsKey(databaseColumn.Key)) {
-                differences.Add(SchemaDifference.CreateTableColumnDifference(SchemaDifference.DifferenceType.Dropped, databaseTable, databaseColumn.Value, targetTable, null));
+                differences.Add(SchemaDifference.CreateTableColumnDifference(SchemaDifference.DifferenceType.Dropped, databaseTable, databaseColumn.Value,
+                    targetTable, null));
             }
         }
 
@@ -239,7 +253,7 @@ public class DatabaseSchemaMigration {
                 differences.AddRange(GetDifferencesForColumn(databaseTable, databaseColumn.Value, targetTable, targetColumn));
             }
         }
-        
+
         return differences;
     }
 
@@ -248,13 +262,15 @@ public class DatabaseSchemaMigration {
 
         foreach (var targetIndex in targetTable.Indexes) {
             if (!databaseTable.Indexes.ContainsKey(targetIndex.Key)) {
-                differences.Add(SchemaDifference.CreateTableIndexDifference(SchemaDifference.DifferenceType.Added, databaseTable, null, targetTable, targetIndex.Value));
+                differences.Add(SchemaDifference.CreateTableIndexDifference(SchemaDifference.DifferenceType.Added, databaseTable, null, targetTable,
+                    targetIndex.Value));
             }
         }
 
         foreach (var databaseIndex in databaseTable.Indexes) {
             if (!targetTable.Indexes.ContainsKey(databaseIndex.Key)) {
-                differences.Add(SchemaDifference.CreateTableIndexDifference(SchemaDifference.DifferenceType.Dropped, databaseTable, databaseIndex.Value, targetTable, null));
+                differences.Add(SchemaDifference.CreateTableIndexDifference(SchemaDifference.DifferenceType.Dropped, databaseTable, databaseIndex.Value,
+                    targetTable, null));
             }
         }
 
@@ -274,35 +290,52 @@ public class DatabaseSchemaMigration {
         var databasePrimaryKeyColumns = databaseTable.Columns.Values.Where(c => c.IsPrimaryKey).Select(c => c.Name).Order().ToList();
         var targetPrimaryKeyColumns = targetTable.Columns.Values.Where(c => c.IsPrimaryKey).Select(c => c.Name).Order().ToList();
         if (!databasePrimaryKeyColumns.SequenceEqual(targetPrimaryKeyColumns))
-            differences.Add(SchemaDifference.CreateTableDifference(SchemaDifference.DifferenceType.Altered, SchemaDifference.PropertyType.PrimaryKey, databaseTable, targetTable));
-        
+            differences.Add(SchemaDifference.CreateTableDifference(SchemaDifference.DifferenceType.Altered, SchemaDifference.PropertyType.PrimaryKey,
+                databaseTable, targetTable));
+
+        // check if the unique columns have changed
+        var databaseUniqueColumns = databaseTable.Columns.Values.Where(c => c.IsUnique).Select(c => c.Name).Order().ToList();
+        var targetUniqueColumns = targetTable.Columns.Values.Where(c => c.IsUnique).Select(c => c.Name).Order().ToList();
+        if (!databaseUniqueColumns.SequenceEqual(targetUniqueColumns))
+            differences.Add(SchemaDifference.CreateTableDifference(SchemaDifference.DifferenceType.Altered, SchemaDifference.PropertyType.Unique, databaseTable,
+                targetTable));
+
         return differences;
     }
-    
-    private List<SchemaDifference> GetDifferencesForColumn(DatabaseTable databaseTable, DatabaseTableColumn databaseTableColumn, DatabaseTable targetTable, DatabaseTableColumn targetTableColumn) {
+
+    private List<SchemaDifference> GetDifferencesForColumn(DatabaseTable databaseTable, DatabaseTableColumn databaseTableColumn, DatabaseTable targetTable,
+        DatabaseTableColumn targetTableColumn) {
         var differences = new List<SchemaDifference>();
 
-        if (databaseTableColumn.Type != targetTableColumn.Type) 
-            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.Type, databaseTable, databaseTableColumn, targetTable, targetTableColumn));
-        if (databaseTableColumn.IsNullable != targetTableColumn.IsNullable) 
-            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.Nullability, databaseTable, databaseTableColumn, targetTable, targetTableColumn));
+        if (databaseTableColumn.Type != targetTableColumn.Type)
+            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.Type, databaseTable, databaseTableColumn, targetTable,
+                targetTableColumn));
+        if (databaseTableColumn.IsNullable != targetTableColumn.IsNullable)
+            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.Nullability, databaseTable, databaseTableColumn, targetTable,
+                targetTableColumn));
         if (databaseTableColumn.IsPrimaryKey != targetTableColumn.IsPrimaryKey)
-            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.PrimaryKey, databaseTable, databaseTableColumn, targetTable, targetTableColumn));
+            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.PrimaryKey, databaseTable, databaseTableColumn, targetTable,
+                targetTableColumn));
         if (databaseTableColumn.IsUnique != targetTableColumn.IsUnique)
-            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.Unique, databaseTable, databaseTableColumn, targetTable, targetTableColumn));
+            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.Unique, databaseTable, databaseTableColumn, targetTable,
+                targetTableColumn));
         if (databaseTableColumn.DefaultValue != targetTableColumn.DefaultValue)
-            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.DefaultValue, databaseTable, databaseTableColumn, targetTable, targetTableColumn));
+            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.DefaultValue, databaseTable, databaseTableColumn, targetTable,
+                targetTableColumn));
         if (databaseTableColumn.ForeignReference != targetTableColumn.ForeignReference)
-            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.ForeignReference, databaseTable, databaseTableColumn, targetTable, targetTableColumn));
-        
+            differences.Add(SchemaDifference.CreateColumnDifference(SchemaDifference.PropertyType.ForeignReference, databaseTable, databaseTableColumn,
+                targetTable, targetTableColumn));
+
         return differences;
     }
 
-    private List<SchemaDifference> GetDifferencesForIndex(DatabaseTable databaseTable, DatabaseTableIndex databaseTableIndex, DatabaseTable targetTable, DatabaseTableIndex targetTableIndex) {
+    private List<SchemaDifference> GetDifferencesForIndex(DatabaseTable databaseTable, DatabaseTableIndex databaseTableIndex, DatabaseTable targetTable,
+        DatabaseTableIndex targetTableIndex) {
         var differences = new List<SchemaDifference>();
 
         if (!databaseTableIndex.ColumnNames.Order().SequenceEqual(targetTableIndex.ColumnNames.Order()))
-            differences.Add(SchemaDifference.CreateIndexDifference(SchemaDifference.PropertyType.Columns, databaseTable, databaseTableIndex, targetTable, targetTableIndex));
+            differences.Add(SchemaDifference.CreateIndexDifference(SchemaDifference.PropertyType.Columns, databaseTable, databaseTableIndex, targetTable,
+                targetTableIndex));
 
         return differences;
     }

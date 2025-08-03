@@ -136,13 +136,17 @@ internal abstract class DatabaseServerBase {
         if (difference.Property == DatabaseSchemaMigration.SchemaDifference.PropertyType.PrimaryKey) {
             await AlterTablePrimaryKey(difference, options);
         }
+        else if (difference.Property == DatabaseSchemaMigration.SchemaDifference.PropertyType.Unique) {
+            await AlterTableUnique(difference, options);
+        }
         else {
             throw new NotSupportedException($"Property '{difference.Property}' is not supported for altering tables.");
         }
     }
 
     public abstract Task AlterTablePrimaryKey(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options);
-
+    public abstract Task AlterTableUnique(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options);
+    
     public virtual async Task AlterTableColumn(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
         if (difference.Property == DatabaseSchemaMigration.SchemaDifference.PropertyType.Type) {
             await AlterTableColumnType(difference, options);
@@ -153,8 +157,14 @@ internal abstract class DatabaseServerBase {
         else if (difference.Property == DatabaseSchemaMigration.SchemaDifference.PropertyType.Nullability) {
             await AlterTableColumnNullability(difference, options);
         }
+        else if (difference.Property == DatabaseSchemaMigration.SchemaDifference.PropertyType.Unique) {
+            await AlterTableColumnUnique(difference, options);
+        }
         else if (difference.Property == DatabaseSchemaMigration.SchemaDifference.PropertyType.PrimaryKey) {
             await AlterTableColumnPrimaryKey(difference, options);
+        }
+        else if (difference.Property == DatabaseSchemaMigration.SchemaDifference.PropertyType.ForeignReference) {
+            await AlterTableColumnForeignReference(difference, options);
         }
         else {
             throw new NotSupportedException($"Property '{difference.Property}' is not supported for altering table columns.");
@@ -166,7 +176,9 @@ internal abstract class DatabaseServerBase {
     public abstract Task AlterTableColumnType(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options);
     public abstract Task AlterTableColumnDefaultValue(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options);
     public abstract Task AlterTableColumnNullability(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options);
+    public abstract Task AlterTableColumnUnique(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options);
     public abstract Task AlterTableColumnPrimaryKey(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options);
+    public abstract Task AlterTableColumnForeignReference(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options);
 
     public async Task DropRedundantTableColumns(DatabaseSchemaMigration schemaMigration, DatabaseServerOptions options) {
         var tableColumnsToDrop = schemaMigration.Differences
