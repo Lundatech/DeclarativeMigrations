@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -12,7 +13,7 @@ internal partial class PostgreSqlDatabaseServer {
     private (string TableName, string FullTableName) GetMigrationTableName(DatabaseServerOptions options, string schemaName, string tableName) {
         if (string.IsNullOrWhiteSpace(tableName))
             throw new ArgumentException("Table name cannot be null or whitespace.", nameof(tableName));
-        return ($"_{options.MigrationDatabasePrefix}_{tableName}", $"\"{schemaName}\".\"_{options.MigrationDatabasePrefix}_{tableName}\"");
+        return ($"{options.MigrationDatabasePrefix}_{tableName}", $"\"{schemaName}\".\"{options.MigrationDatabasePrefix}_{tableName}\"");
     }
 
     private async Task<bool> SchemaExists(string schemaName) {
@@ -74,7 +75,207 @@ internal partial class PostgreSqlDatabaseServer {
         }
     }
     
+    private class PrimaryKeyConstraint {
+        public string ConstraintName { get; }
+        public string TableName { get; }
+        public HashSet<string> ColumnNames { get; } = [];
+
+        public PrimaryKeyConstraint(string constraintName, string tableName) {
+            ConstraintName = constraintName;
+            TableName = tableName;
+        }
+    }
+
+    private class UniqueConstraint {
+        public string ConstraintName { get; }
+        public string TableName { get; }
+        public HashSet<string> ColumnNames { get; } = [];
+
+        public UniqueConstraint(string constraintName, string tableName) {
+            ConstraintName = constraintName;
+            TableName = tableName;
+        }
+    }
+
+    private class ForeignKeyConstraint {
+        public string ReferencedTableName { get; }
+        public string ReferencedColumnName { get; }
+        public CascadeType OnUpdateCascadeType { get; }
+        public CascadeType OnDeleteCascadeType { get; }
+
+        public ForeignKeyConstraint(string referencedTableName, string referencedColumnName, CascadeType onUpdateCascadeType, CascadeType onDeleteCascadeType) {
+            ReferencedTableName = referencedTableName ?? throw new ArgumentNullException(nameof(referencedTableName), "Referenced table name cannot be null.");
+            ReferencedColumnName = referencedColumnName ?? throw new ArgumentNullException(nameof(referencedColumnName), "Referenced column name cannot be null.");
+            OnUpdateCascadeType = onUpdateCascadeType;
+            OnDeleteCascadeType = onDeleteCascadeType;
+        }
+    }
+
+    private async Task<Dictionary<string, PrimaryKeyConstraint>> ReadPrimaryKeyConstraints(DatabaseSchema schema, DatabaseServerOptions options) {
+        var constraints = new Dictionary<string, PrimaryKeyConstraint>();
+
+        var query = """
+            SELECT
+            	tc.constraint_name,
+            	tc.table_name,
+            	kcu.column_name
+            FROM information_schema.table_constraints tc
+            LEFT JOIN information_schema.key_column_usage kcu
+            	ON kcu.constraint_schema = tc.constraint_schema AND kcu.constraint_name = tc.constraint_name
+            WHERE tc.table_schema = @schema_name AND tc.constraint_type = 'PRIMARY KEY'
+            ORDER BY tc.constraint_name
+            """;
+        await using var command = new NpgsqlCommand(query, _connection, _transaction);
+        command.Parameters.AddWithValue("schema_name", schema.Name);
+
+        PrimaryKeyConstraint? currentConstraint = null;
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync()) {
+            var constraintName = (string)reader["constraint_name"];
+            var tableName = (string)reader["table_name"];
+            var columnName = (string)reader["column_name"];
+
+            if (tableName.StartsWith($"{options.MigrationDatabasePrefix}_")) {
+                // skip migration tables
+                continue;
+            }
+
+            if (currentConstraint == null) {
+                currentConstraint = new PrimaryKeyConstraint(constraintName, tableName);
+            }
+            else if (currentConstraint.ConstraintName != constraintName) {
+                constraints.Add(currentConstraint.TableName, currentConstraint);
+                currentConstraint = new PrimaryKeyConstraint(constraintName, tableName);
+            }
+
+            // add column
+            currentConstraint.ColumnNames.Add(columnName);
+        }
+
+        if (currentConstraint != null) constraints.Add(currentConstraint.TableName, currentConstraint);
+
+        return constraints;
+    }
+
+    private async Task<Dictionary<string, UniqueConstraint>> ReadUniqueConstraints(DatabaseSchema schema, DatabaseServerOptions options) {
+        var constraints = new Dictionary<string, UniqueConstraint>();
+
+        var query = """
+            SELECT
+            	tc.constraint_name,
+            	tc.table_name,
+            	kcu.column_name
+            FROM information_schema.table_constraints tc
+            LEFT JOIN information_schema.key_column_usage kcu
+            	ON kcu.constraint_schema = tc.constraint_schema AND kcu.constraint_name = tc.constraint_name
+            WHERE tc.table_schema = @schema_name AND tc.constraint_type = 'UNIQUE'
+            ORDER BY tc.constraint_name
+            """;
+        await using var command = new NpgsqlCommand(query, _connection, _transaction);
+        command.Parameters.AddWithValue("schema_name", schema.Name);
+
+        UniqueConstraint? currentConstraint = null;
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync()) {
+            var constraintName = (string)reader["constraint_name"];
+            var tableName = (string)reader["table_name"];
+            var columnName = (string)reader["column_name"];
+
+            if (tableName.StartsWith($"{options.MigrationDatabasePrefix}_")) {
+                // skip migration tables
+                continue;
+            }
+
+            if (currentConstraint == null) {
+                currentConstraint = new UniqueConstraint(constraintName, tableName);
+            }
+            else if (currentConstraint.ConstraintName != constraintName) {
+                constraints.Add(currentConstraint.TableName, currentConstraint);
+                currentConstraint = new UniqueConstraint(constraintName, tableName);
+            }
+
+            // add column
+            currentConstraint.ColumnNames.Add(columnName);
+        }
+
+        if (currentConstraint != null) constraints.Add(currentConstraint.TableName, currentConstraint);
+
+        return constraints;
+    }
+
+    private async Task<ConcurrentDictionary<string, Dictionary<string, ForeignKeyConstraint>>> ReadForeignKeyConstraints(DatabaseSchema schema, DatabaseServerOptions options) {
+        var constraints = new ConcurrentDictionary<string, Dictionary<string, ForeignKeyConstraint>>();
+
+        var query = """
+            SELECT
+            	tc.constraint_name,
+            	tc.table_name,
+            	kcu.column_name,
+            	ccu.table_name AS referencing_table_name,
+            	ccu.column_name AS referencing_column_name,
+            	rc.update_rule,
+            	rc.delete_rule
+            FROM information_schema.table_constraints tc
+            LEFT JOIN information_schema.constraint_column_usage ccu
+            	ON ccu.constraint_schema = tc.constraint_schema AND ccu.constraint_name = tc.constraint_name
+            LEFT JOIN information_schema.key_column_usage kcu
+            	ON kcu.constraint_schema = tc.constraint_schema AND kcu.constraint_name = tc.constraint_name
+            LEFT JOIN information_schema.referential_constraints rc
+            	ON rc.constraint_schema = tc.constraint_schema AND rc.constraint_name = tc.constraint_name
+            WHERE tc.table_schema = @schema_name AND tc.constraint_type = 'FOREIGN KEY'
+            """;
+        await using var command = new NpgsqlCommand(query, _connection, _transaction);
+        command.Parameters.AddWithValue("schema_name", schema.Name);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync()) {
+            var constraintName = (string)reader["constraint_name"];
+            var tableName = (string)reader["table_name"];
+            var columnName = (string)reader["column_name"];
+            var referencingTableName = (string)reader["referencing_table_name"];
+            var referencingColumnName = (string)reader["referencing_column_name"];
+            var updateRule = (string)reader["update_rule"];
+            var deleteRule = (string)reader["delete_rule"];
+
+            if (tableName.StartsWith($"{options.MigrationDatabasePrefix}_")) {
+                // skip migration tables
+                continue;
+            }
+
+            var onUpdateCascadeType = updateRule switch {
+                "RESTRICT" => CascadeType.Restrict,
+                "CASCADE" => CascadeType.Cascade,
+                "SET DEFAULT" => CascadeType.SetDefault,
+                "SET NULL" => CascadeType.SetNull,
+                "NO ACTION" => CascadeType.NoAction,
+                _ => throw new NotImplementedException(updateRule),
+            };
+
+            var onDeleteCascadeType = deleteRule switch {
+                "RESTRICT" => CascadeType.Restrict,
+                "CASCADE" => CascadeType.Cascade,
+                "SET DEFAULT" => CascadeType.SetDefault,
+                "SET NULL" => CascadeType.SetNull,
+                "NO ACTION" => CascadeType.NoAction,
+                _ => throw new NotImplementedException(deleteRule),
+            };
+
+            var constraint = new ForeignKeyConstraint(referencingTableName, referencingColumnName, onUpdateCascadeType, onDeleteCascadeType);
+
+            var tableConstraints = constraints.GetOrAdd(tableName, _ => []);
+            tableConstraints[columnName] = constraint;
+        }
+
+        return constraints;
+    }
+
     private async Task ReadTables(DatabaseSchema schema, DatabaseServerOptions options) {
+        var primaryKeyConstraints = await ReadPrimaryKeyConstraints(schema, options);
+        var uniqueConstraints = await ReadUniqueConstraints(schema, options);
+        var foreignKeyConstraints = await ReadForeignKeyConstraints(schema, options);
+
         // read all tables from server
         var query = """
             SELECT
@@ -84,46 +285,7 @@ internal partial class PostgreSqlDatabaseServer {
             	c.is_nullable,
             	c.data_type,
             	c.character_maximum_length,
-            	c.numeric_precision,
-            	(SELECT EXISTS (
-            		SELECT 
-            			1
-            		FROM information_schema.table_constraints tc
-            		JOIN information_schema.constraint_column_usage ccu
-            			ON ccu.constraint_schema = tc.constraint_schema AND ccu.constraint_name = tc.constraint_name
-            		WHERE tc.table_schema = t.table_schema AND tc.table_name = t.table_name AND ccu.column_name = c.column_name AND tc.constraint_type = 'UNIQUE'
-            	)) AS is_unique,
-            	(SELECT EXISTS (
-            		SELECT 
-            			1
-            		FROM information_schema.table_constraints tc
-            		JOIN information_schema.constraint_column_usage ccu
-            			ON ccu.constraint_schema = tc.constraint_schema AND ccu.constraint_name = tc.constraint_name
-            		WHERE tc.table_schema = t.table_schema AND tc.table_name = t.table_name AND ccu.column_name = c.column_name AND tc.constraint_type = 'PRIMARY KEY'
-            	)) AS is_primary_key,
-            	(SELECT
-            		ccu.table_name
-            	FROM information_schema.table_constraints tc
-            	JOIN information_schema.constraint_column_usage ccu
-            		ON ccu.constraint_schema = tc.constraint_schema AND ccu.constraint_name = tc.constraint_name
-            	WHERE tc.table_schema = t.table_schema AND tc.table_name = t.table_name AND ccu.column_name = c.column_name AND tc.constraint_type = 'FOREIGN KEY'
-            	) AS foreign_table_name,
-            	(SELECT
-            		ccu.column_name
-            	FROM information_schema.table_constraints tc
-            	JOIN information_schema.constraint_column_usage ccu
-            		ON ccu.constraint_schema = tc.constraint_schema AND ccu.constraint_name = tc.constraint_name
-            	WHERE tc.table_schema = t.table_schema AND tc.table_name = t.table_name AND ccu.column_name = c.column_name AND tc.constraint_type = 'FOREIGN KEY'
-            	) AS foreign_column_name,
-            	(SELECT
-            		rc.delete_rule
-            	FROM information_schema.table_constraints tc
-            	JOIN information_schema.constraint_column_usage ccu
-            		ON ccu.constraint_schema = tc.constraint_schema AND ccu.constraint_name = tc.constraint_name
-            	JOIN information_schema.referential_constraints rc
-            		ON rc.constraint_schema = tc.constraint_schema AND rc.constraint_name = tc.constraint_name
-            	WHERE tc.table_schema = t.table_schema AND tc.table_name = t.table_name AND ccu.column_name = c.column_name AND tc.constraint_type = 'FOREIGN KEY'
-            	) AS foreign_delete_rule	
+            	c.numeric_precision
             FROM information_schema.tables t
             JOIN information_schema.columns c
             	ON c.table_schema = t.table_schema AND c.table_name = t.table_name
@@ -144,13 +306,8 @@ internal partial class PostgreSqlDatabaseServer {
             var dataType = (string)reader["data_type"];
             var characterMaximumLength = reader["character_maximum_length"] as int?;
             var numericPrecision = reader["numeric_precision"] as int?;
-            var isPrimaryKey = (bool)reader["is_primary_key"];
-            var isUnique = (bool)reader["is_unique"];
-            var foreignTableName = reader["foreign_table_name"] as string;
-            var foreignColumnName = reader["foreign_column_name"] as string;
-            var foreignDeleteRule = reader["foreign_delete_rule"] as string;
 
-            if (tableName.StartsWith($"_{options.MigrationDatabasePrefix}_")) {
+            if (tableName.StartsWith($"{options.MigrationDatabasePrefix}_")) {
                 // skip migration tables
                 continue;
             }
@@ -160,20 +317,6 @@ internal partial class PostgreSqlDatabaseServer {
             DatabaseTableColumnDefaultValue? defaultValue = null;
             if (columnDefault != null) defaultValue = GetColumnDefault(columnDefault, databaseType);
 
-            DatabaseTableColumnForeignReference? foreignReference = null;
-
-            if (foreignDeleteRule != null) {
-                var onDeleteCascadeType = foreignDeleteRule switch {
-                    "RESTRICT" => CascadeType.Restrict,
-                    "CASCADE" => CascadeType.Cascade,
-                    "SET DEFAULT" => CascadeType.SetDefault,
-                    "SET NULL" => CascadeType.SetNull,
-                    "NO ACTION" => CascadeType.NoAction,
-                    _ => throw new NotImplementedException(foreignDeleteRule),
-                };
-                foreignReference = new DatabaseTableColumnForeignReference(foreignTableName!, foreignColumnName!, onDeleteCascadeType);
-            }
-
             if (currentTable == null) {
                 currentTable = new DatabaseTable(schema, tableName);
             }
@@ -182,9 +325,15 @@ internal partial class PostgreSqlDatabaseServer {
                 currentTable = new DatabaseTable(schema, tableName);
             }
 
+            var isPrimaryKey = primaryKeyConstraints.TryGetValue(tableName, out var primaryKeyConstraint) && primaryKeyConstraint.ColumnNames.Contains(columnName);
+            var isUnique = uniqueConstraints.TryGetValue(tableName, out var uniqueConstraint) && uniqueConstraint.ColumnNames.Contains(columnName);
+            DatabaseTableColumnForeignReference? foreignReference = null;
+            if (foreignKeyConstraints.TryGetValue(tableName, out var foreignKeyConstraint) && foreignKeyConstraint.TryGetValue(columnName, out var foreignKey)) {
+                foreignReference = new DatabaseTableColumnForeignReference(foreignKey.ReferencedTableName, foreignKey.ReferencedColumnName, foreignKey.OnDeleteCascadeType);
+            }
+
             // add column
-            var column = new DatabaseTableColumn(currentTable, columnName, databaseType, isNullable,
-                isPrimaryKey, isUnique, defaultValue, foreignReference);
+            var column = new DatabaseTableColumn(currentTable, columnName, databaseType, isNullable, isPrimaryKey, isUnique, defaultValue, foreignReference);
             currentTable.AddColumn(column);
         }
 

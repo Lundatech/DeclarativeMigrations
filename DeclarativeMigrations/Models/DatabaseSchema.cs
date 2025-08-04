@@ -15,7 +15,7 @@ public class DatabaseSchema {
     private readonly DatabaseServerBase _databaseServer;
     private readonly ConcurrentDictionary<string, DatabaseTable> _tables = [];
     private readonly ConcurrentDictionary<string, DatabaseSequence> _sequences = [];
-    
+
     // private readonly ConcurrentDictionary<string, DatabaseUserDefinedType> _types = [];
     // private readonly ConcurrentDictionary<string, DatabaseProcedure> _procedures = [];
     // private readonly ConcurrentDictionary<string, DatabaseFunction> _functions = [];
@@ -38,6 +38,9 @@ public class DatabaseSchema {
 
     internal TableBuilder<TCustomTypes, TCustomTypeProvider> ReplaceTable<TCustomTypes, TCustomTypeProvider>(string tableName, TCustomTypeProvider customTypeProvider) where TCustomTypes : Enum where TCustomTypeProvider : ICustomTypeProvider<TCustomTypes> {
         _tables.TryRemove(tableName, out _);
+        foreach (var sequence in _sequences.Values.Where(x => x.Name.StartsWith($"ltdmseq_{tableName}__"))) {
+            _sequences.TryRemove(sequence.Name, out _);
+        }
         return new TableBuilder<TCustomTypes, TCustomTypeProvider>(this, tableName, customTypeProvider, _databaseServer);
     }
 
@@ -51,6 +54,9 @@ public class DatabaseSchema {
 
     internal TableBuilder<NullCustomTypes, NullCustomTypeProvider> ReplaceStandardTable(string tableName) {
         _tables.TryRemove(tableName, out _);
+        foreach (var sequence in _sequences.Values.Where(x => x.Name.StartsWith($"ltdmseq_{tableName}__"))) {
+            _sequences.TryRemove(sequence.Name, out _);
+        }
         return new TableBuilder<NullCustomTypes, NullCustomTypeProvider>(this, tableName, new NullCustomTypeProvider(), _databaseServer);
     }
 
@@ -79,7 +85,7 @@ public class DatabaseSchema {
         if (!_sequences.TryAdd(sequence.Name, sequence))
             throw new ArgumentException($"Sequence with name '{sequence.Name}' already exists in the schema.", nameof(sequence));
     }
-    
+
     public DatabaseSchemaMigration GetMigrationToTargetSchema(DatabaseSchema targetSchema, DatabaseServerOptions options) {
         if (targetSchema == null)
             throw new ArgumentNullException(nameof(targetSchema), "Target schema cannot be null.");
@@ -92,7 +98,7 @@ public class DatabaseSchema {
 
         // start by adding all tables that have no references to other tables and then add tables that reference those tables
         AddTables(orderedTables, new HashSet<string>());
-        
+
         return orderedTables;
     }
 
@@ -107,14 +113,14 @@ public class DatabaseSchema {
             orderedTables.Add(tableToAdd);
             addedTables.Add(tableToAdd.Name);
         }
-        
+
         // any more tables to add?
         if (_tables.Count > orderedTables.Count) {
             // recursively call to add more tables
             AddTables(orderedTables, addedTables);
         }
     }
-    
+
     public override string ToString() {
         return $"[{Name} {SchemaOrApplicationVersion}]";
     }

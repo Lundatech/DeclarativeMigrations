@@ -11,7 +11,7 @@ public class DatabaseSequence {
             throw new ArgumentException("Sequence name cannot be null or whitespace.", nameof(name));
         if (name.Trim() != name)
             throw new ArgumentException($"Sequence name cannot contain leading or trailing whitespace.", nameof(name));
-        
+
         ParentSchema = parentSchema;
         Name = name;
     }

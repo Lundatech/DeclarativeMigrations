@@ -24,17 +24,21 @@ public class Tests {
     private DatabaseSchema? _requiredSchema = null;
 
     class NUnitLogger<T> : ILogger<T>, IDisposable {
-        private readonly Action<string> output = Console.WriteLine;
+        //private readonly Action<string> output = Console.WriteLine;
 
         public void Dispose() {
         }
 
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception exception,
-            Func<TState, Exception, string> formatter) => output(formatter(state, exception));
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) {
+            Console.WriteLine(formatter(state, exception));
+            Console.Out.Flush();
+        }
 
         public bool IsEnabled(LogLevel logLevel) => true;
 
-        public IDisposable BeginScope<TState>(TState state) => this;
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull {
+            return this;
+        }
     }
 
     [OneTimeSetUp]
@@ -441,13 +445,14 @@ public class Tests {
 
         var databaseSchema = await MigrateAndCheck();
 
-        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(2));
     }
+
     [Test]
     [Order(22)]
     public async Task _22_DropForeignReference() {
         _requiredSchema!.IncrementVersion();
-        _requiredSchema!.AddStandardTable("new_table2")
+        _requiredSchema!.ReplaceStandardTable("new_table2")
             .WithColumn("id").AsSerialInteger32().AsPrimaryKey()
             .WithColumn("name").AsString(200)
             .WithColumn("external_id").AsGuid()
@@ -455,14 +460,14 @@ public class Tests {
 
         var databaseSchema = await MigrateAndCheck();
 
-        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(2));
     }
 
     [Test]
     [Order(23)]
     public async Task _23_AddForeignReference() {
         _requiredSchema!.IncrementVersion();
-        _requiredSchema!.AddStandardTable("new_table2")
+        _requiredSchema!.ReplaceStandardTable("new_table2")
             .WithColumn("id").AsSerialInteger32().AsPrimaryKey()
             .WithColumn("name").AsString(200)
             .WithColumn("external_id").AsGuid().HavingReferenceTo("new_table", "id", CascadeType.Cascade)
@@ -470,7 +475,7 @@ public class Tests {
 
         var databaseSchema = await MigrateAndCheck();
 
-        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(1));
+        Assert.That(databaseSchema.Tables.Count, Is.EqualTo(2));
     }
 
 }
