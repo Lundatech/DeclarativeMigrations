@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 
 using Lundatech.DeclarativeMigrations.Models;
 
+using Microsoft.Extensions.Logging;
+
 using Npgsql;
 
 namespace Lundatech.DeclarativeMigrations.DatabaseServers.PostgreSql;
@@ -132,9 +134,9 @@ internal partial class PostgreSqlDatabaseServer {
         extraScripts.AddRange(foreignReferenceColumns.Select(c=> {
             return $"""
                 CONSTRAINT {GetForeignKeyConstraintName(c)}
-                   FOREIGN KEY (\"{c.Name}\")
+                   FOREIGN KEY ({GetQuotedTableColumnName(c, options)})
                    REFERENCES {GetQuotedTableName(table.ParentSchema.Tables[c.ForeignReference!.ForeignTableName], options)}
-                   (\"{c.ForeignReference!.ForeignColumnName}\")
+                   ("{c.ForeignReference!.ForeignColumnName}")
                    ON DELETE {GetCascadeTypeScript(c.ForeignReference!.OnDeleteCascadeType)}
                 """;
         }));
@@ -157,8 +159,26 @@ internal partial class PostgreSqlDatabaseServer {
         await ExecuteScript(script, options);
     }
 
-    public override Task AlterTableColumnForeignReference(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
-        if (difference.DatabaseTable!.)
+    public override async Task AlterTableColumnForeignReference(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        if (difference.DatabaseTableColumn!.ForeignReference != null) {
+            var script = $"""
+                ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)}
+                    DROP CONSTRAINT {GetForeignKeyConstraintName(difference.DatabaseTableColumn!)};
+                """;
+            await ExecuteScript(script, options);
+        }
+        
+        if (difference.TargetTableColumn!.ForeignReference != null) {
+            var script = $"""
+                ALTER TABLE {GetQuotedTableName(difference.DatabaseTable!, options)}
+                    ADD CONSTRAINT {GetForeignKeyConstraintName(difference.TargetTableColumn!)}
+                    FOREIGN KEY ({GetQuotedTableColumnName(difference.TargetTableColumn!, options)})
+                    REFERENCES {GetQuotedTableName(difference.TargetTable!.ParentSchema.Tables[difference.TargetTableColumn!.ForeignReference.ForeignTableName], options)}
+                    ("{difference.TargetTableColumn!.ForeignReference.ForeignColumnName}")
+                    ON DELETE {GetCascadeTypeScript(difference.TargetTableColumn!.ForeignReference.OnDeleteCascadeType)};
+                """;
+            await ExecuteScript(script, options);
+        }
     }
 
     public override Task AlterTableColumnUnique(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
@@ -226,6 +246,8 @@ internal partial class PostgreSqlDatabaseServer {
     }
 
     public override async Task ExecuteScript(string script, DatabaseServerOptions options) {
+        options.Logger?.LogDebug("Executing script: {Script}", script);
+        
         await using var command = new NpgsqlCommand(script, _connection, _transaction);
         await command.ExecuteNonQueryAsync();
     }

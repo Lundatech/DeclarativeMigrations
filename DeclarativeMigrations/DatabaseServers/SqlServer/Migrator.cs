@@ -48,7 +48,11 @@ internal partial class SqlServerDatabaseServer {
     public override Task AlterTableColumnPrimaryKey(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
         throw new NotImplementedException();
     }
-    
+
+    public override Task AlterTableColumnForeignReference(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
+        throw new NotImplementedException();
+    }
+
     public override Task AlterTableUnique(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
         throw new NotImplementedException();
     }

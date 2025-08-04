@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using Lundatech.DeclarativeMigrations.DatabaseServers;
 using Lundatech.DeclarativeMigrations.Models;
 
+using Microsoft.Extensions.Logging;
+
 using Npgsql;
 
 using NUnit.Framework;
@@ -16,12 +18,29 @@ namespace IntegrationTests;
 public class Tests {
     public const string SchemaName = "test_schema";
 
+    private NUnitLogger<DatabaseServer>? _logger = null;
     private PostgreSqlContainer? _container = null;
     private string? _connectionString = null;
     private DatabaseSchema? _requiredSchema = null;
 
+    class NUnitLogger<T> : ILogger<T>, IDisposable {
+        private readonly Action<string> output = Console.WriteLine;
+
+        public void Dispose() {
+        }
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception exception,
+            Func<TState, Exception, string> formatter) => output(formatter(state, exception));
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public IDisposable BeginScope<TState>(TState state) => this;
+    }
+
     [OneTimeSetUp]
     public async Task Setup() {
+        _logger = new NUnitLogger<DatabaseServer>();
+        
         var containerName = $"ltdm-pg-{DateTime.Now.Ticks}";
         _container = new PostgreSqlBuilder()
             .WithImage("postgres:17.5")
@@ -51,6 +70,11 @@ public class Tests {
 
     [OneTimeTearDown]
     public async Task Teardown() {
+        if (_logger != null) {
+            _logger.Dispose();
+            _logger = null;
+        }
+        
         if (_container != null) {
             await _container.DisposeAsync();
             _container = null;
@@ -58,13 +82,21 @@ public class Tests {
     }
 
     private async Task<DatabaseSchema> MigrateAndCheck(Action<DatabaseServerOptions>? configure = null) {
-        var databaseServer = await DatabaseServer.Create(DatabaseServerType.PostgreSql, _connectionString!, configure);
+        _logger!.LogInformation("Migrating database schema to version {Version} for schema {SchemaName}",
+            _requiredSchema!.SchemaOrApplicationVersion, SchemaName);
+        
+        var databaseServer = await DatabaseServer.Create(DatabaseServerType.PostgreSql, _connectionString!, options => {
+            options.Logger = _logger;
+            configure?.Invoke(options);
+        });
         await databaseServer.MigrateSchemaTo(_requiredSchema!);
 
         return await ConsistencyAsserts();
     }
 
     private async Task<DatabaseSchema> ConsistencyAsserts() {
+        _logger!.LogInformation("Checking consistency of database schema {SchemaName}", SchemaName);
+        
         var databaseServer = await DatabaseServer.Create(DatabaseServerType.PostgreSql, _connectionString!);
         var databaseSchema = await databaseServer.ReadSchema(SchemaName);
 
@@ -78,10 +110,13 @@ public class Tests {
         return databaseSchema;
     }
 
+    // FIXME: refactor this so that we can run each test in isolation without having to run the previous ones
+    // break out required schema creation for each test into a separate method so that each test can accumulate changes to the required schema
+    
     [Test]
     [Order(1)]
     public async Task _01_InitialCreateTable() {
-        _requiredSchema = new DatabaseSchema(DatabaseServerType.PostgreSql, SchemaName, new Version(1, 0, 0));
+        _requiredSchema = new DatabaseSchema(DatabaseServerType.PostgreSql, SchemaName, new Version(1, 0, 1));
         _requiredSchema.AddStandardTable("standard_table")
             .WithColumn("id").AsSerialInteger32().AsPrimaryKey()
             .WithColumn("name").AsString(100)
