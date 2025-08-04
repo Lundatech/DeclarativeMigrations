@@ -158,7 +158,7 @@ internal partial class PostgreSqlDatabaseServer {
     }
 
     public override Task AlterTableColumnForeignReference(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
-        fixme
+        if (difference.DatabaseTable!.)
     }
 
     public override Task AlterTableColumnUnique(DatabaseSchemaMigration.SchemaDifference difference, DatabaseServerOptions options) {
